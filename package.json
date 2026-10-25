@@ -1,0 +1,11 @@
+{
+  "name": "ashen-covenant",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A procedural Three.js dark fantasy arena roguelike.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node --check dist/game.js && node --check dist/rules.js && node --check dist/boot.js"
+  }
+}
