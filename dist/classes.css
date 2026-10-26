@@ -1,0 +1,61 @@
+.class-panel { width: 840px; text-align: center; max-height: calc(100dvh - 140px); overflow-y: auto; padding: 12px; scrollbar-width: thin; scrollbar-color: #9d875d #11191b; }
+.class-lead { color: #a6afa5; font-size: 12px; line-height: 1.8; margin: 0 0 22px; }
+#class-choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+.class-choice { display: flex; align-items: center; flex-direction: column; gap: 8px; padding: 17px 10px; border: 1px solid #bca17740; background: #18211de8; color: #b7bfb5; }
+.class-choice[aria-pressed="true"] { border-color: var(--class-color); box-shadow: inset 0 0 24px #d2c8970d; color: var(--class-color); background: #26312b; }
+.class-choice>span { font: 26px Georgia, serif; color: var(--class-color); }
+.class-choice b { font: 18px Cinzel, Georgia, serif; }
+.class-choice small { font-size: 9px; color: #a4aea4; }
+.path-ability { display: flex; gap: 18px; text-align: left; padding: 14px 18px; margin: 8px 0; background: #18211dc9; border: 1px solid #bca17724; }
+.path-ability.unlocked { border-left: 3px solid #c7a375; }
+.path-icon { font: 30px Georgia, serif; color: var(--gold); width: 36px; flex-shrink: 0; text-align: center; align-self: center; }
+.path-ability .eyebrow { font-size: 8px; letter-spacing: 1.2px; }
+.path-ability h3 { margin: 7px 0; font: 17px Cinzel, Georgia, serif; }
+.path-ability kbd { font: 11px Inter, Arial, sans-serif; padding: 2px 5px; border: 1px solid #bca17750; margin-right: 5px; }
+.path-ability p { margin: 0; color: #a9b2a7; font-size: 11px; line-height: 1.65; }
+.class-panel .primary { margin-top: 15px; position: sticky; bottom: 0; z-index: 2; background: #30332a; box-shadow: 0 -8px 20px #0b1114d9; }
+#class-hud { display: none; position: fixed; bottom: 130px; left: 50%; transform: translateX(-50%); z-index: 5; text-align: center; }
+.playing #class-hud { display: block; }
+#class-info { background: #0c1417e0; border: 1px solid #bca17733; font-size: 8px; letter-spacing: 1.6px; padding: 7px 14px; color: var(--class-color); margin-bottom: 6px; }
+#class-info kbd { font: 8px Inter, sans-serif; color: #b6beb1; border: 1px solid #78827055; padding: 1px 3px; margin-left: 6px; }
+#class-slots { display: flex; justify-content: center; gap: 7px; }
+.class-ability { width: 90px; height: 83px; background: linear-gradient(#29342de0, #10171af5); }
+.class-ability .ability-glyph { color: var(--class-color); font-size: 26px; }
+.class-ability small { font-size: 7px; letter-spacing: .5px; }
+.class-state { position: relative; font-size: 7px; z-index: 1; color: var(--class-color); }
+.class-ability.locked { filter: saturate(.2); opacity: .5; }
+.class-ability:disabled { cursor: default; opacity: .75; }
+.class-ability.locked:disabled { opacity: .5; }
+#class-buff { min-height: 12px; margin-top: 5px; color: var(--class-color); font-size: 8px; letter-spacing: 1px; text-shadow: 0 1px 5px #000; }
+#class-unlock { padding: 14px 20px; margin: -8px 0 20px; background: #bca17715; border: 1px solid #c7a37570; color: #ead8ab; font-size: 12px; line-height: 1.7; }
+#interact { bottom: 280px; }
+@media (max-width: 700px) {
+  .class-panel { padding: 0; max-height: calc(100dvh - 115px); }
+  .class-panel h2 { margin: 10px 0; font-size: 26px; }
+  .class-lead { font-size: 10px; margin-bottom: 15px; }
+  #class-choices { gap: 6px; }
+  .class-choice { padding: 10px 5px; gap: 5px; }
+  .class-choice b { font-size: 15px; }
+  .class-choice small { font-size: 8px; line-height: 1.5; }
+  .path-ability { gap: 10px; padding: 10px; }
+  .path-icon { width: 26px; font-size: 25px; }
+  .path-ability h3 { font-size: 15px; }
+  .path-ability .eyebrow { font-size: 7px; }
+  .path-ability p { font-size: 10px; }
+  #class-hud { bottom: 93px; left: auto; right: 16px; transform: none; }
+  #class-info { font-size: 7px; padding: 6px; letter-spacing: .8px; }
+  #class-slots { gap: 4px; }
+  .class-ability { width: 58px; height: 74px; }
+  .class-ability small { font-size: 6px; letter-spacing: 0; }
+  .class-state { font-size: 6px; }
+  #class-buff { font-size: 7px; }
+  .vitals { bottom: 205px; }
+  #interact { bottom: 260px; }
+  #class-unlock { font-size: 10px; padding: 10px; margin-bottom: 12px; }
+}
+@media (max-height: 650px) and (min-width: 701px) {
+  .class-panel { max-height: calc(100dvh - 100px); }
+  #class-hud { bottom: 111px; }
+  .class-ability { height: 65px; }
+  .class-ability .ability-glyph { font-size: 20px; }
+}

@@ -1,5 +1,7 @@
 import * as THREE from './vendor/three.module.js';
-import { createStats, waveConfig, enemyKind, chooseBlessings, heal, constrainPosition, MAX_ACTIVE_ENEMIES } from './rules.js';
+import { makeWeapon, weaponInfo, weaponStats, rollLoot, loadWallet, saveWallet, normalizeGold } from './loot.js';
+import { CLASSES, CLASS_KEYS, getClass, createClassState, unlockClassWave, abilityStatus, absorbClassDamage, resetClassCombat, castClassAbility, tickClassCombat } from './classes.js';
+import { createStats, waveConfig, enemyKind, chooseBlessings, heal, constrainPosition, MAX_ACTIVE_ENEMIES, ARENA_RADIUS, REGIONS, createChests, openChest, buyHealing } from './rules.js';
 
 // All artwork is procedural: shared geometry, hand-built silhouettes and a painted stone atlas.
 const $ = id => document.getElementById(id);
@@ -72,10 +74,10 @@ function paintedFloor() {
   for (let i = 0; i < 130; i++) { const x = random() * 1024, y = random() * 1024, r = range(5, 60); const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, '#080d0e55'); g.addColorStop(1, '#080d0e00'); c.fillStyle = g; c.fillRect(x - r, y - r, r * 2, r * 2); }
   const t = new THREE.CanvasTexture(canvas); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 2); t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); return t;
 }
-const ground = mesh(scene, new THREE.CylinderGeometry(20.1, 20.8, 1, 96), mat('#343e40'), 0, -0.56, 0);
-const floor = mesh(scene, new THREE.CircleGeometry(19.8, 96), new THREE.MeshStandardMaterial({ map: paintedFloor(), roughness: 0.79, metalness: 0.18 }), 0, -0.035, 0);
+const ground = mesh(scene, new THREE.CylinderGeometry(38.1, 38.8, 1, 96), mat('#343e40'), 0, -0.56, 0);
+const floor = mesh(scene, new THREE.CircleGeometry(37.8, 96), new THREE.MeshStandardMaterial({ map: paintedFloor(), roughness: 0.79, metalness: 0.18 }), 0, -0.035, 0);
 floor.rotation.x = -Math.PI / 2;
-for (const radius of [6.6, 7, 17.7, 18.1, 19.3]) ring(scene, radius, '#9d936c', radius > 10 ? 0.3 : 0.24, 0.005);
+for (const radius of [6.6, 7, 35.3, 36, 37.3]) ring(scene, radius, '#9d936c', radius > 10 ? 0.3 : 0.24, 0.005);
 const seal = new THREE.Group(); scene.add(seal);
 for (let i = 0; i < 5; i++) {
   const a = i * TAU / 5, b = (i + 2) * TAU / 5;
@@ -83,7 +85,7 @@ for (let i = 0; i < 5; i++) {
   const bar = mesh(seal, geo.box, materials.rune, (p1.x + p2.x) / 2, 0.015, (p1.z + p2.z) / 2, 0.035, 0.012, p1.distanceTo(p2)); bar.rotation.y = Math.atan2(p2.x - p1.x, p2.z - p1.z);
 }
 for (let i = 0; i < 32; i++) {
-  const a = i * TAU / 32, r = 18.7; const m = mesh(scene, geo.box, materials.rune, Math.sin(a) * r, 0.015, Math.cos(a) * r, 0.09, 0.015, i % 4 === 0 ? 0.7 : 0.3); m.rotation.y = a;
+  const a = i * TAU / 32, r = 36.7; const m = mesh(scene, geo.box, materials.rune, Math.sin(a) * r, 0.015, Math.cos(a) * r, 0.09, 0.015, i % 4 === 0 ? 0.7 : 0.3); m.rotation.y = a;
 }
 const flames = [];
 const glowCanvas = document.createElement('canvas'); glowCanvas.width = glowCanvas.height = 64;
@@ -103,7 +105,7 @@ function brazier(x, z, index) {
 }
 // Broken buttresses and pointed arches frame the arena without obscuring the playable floor.
 for (let i = 0; i < 12; i++) {
-  const a = i * TAU / 12, g = new THREE.Group(); g.position.set(Math.sin(a) * 20, 0, Math.cos(a) * 20); g.rotation.y = a; scene.add(g);
+  const a = i * TAU / 12, g = new THREE.Group(); g.position.set(Math.sin(a) * 38, 0, Math.cos(a) * 38); g.rotation.y = a; scene.add(g);
   const height = i >= 3 && i <= 9 ? 6.5 : range(1.8, 3.2);
   mesh(g, geo.box, materials.darkStone, 0, 0.25, 0, 2.2, 0.5, 2.1);
   mesh(g, geo.box, materials.stone, 0, height / 2, 0, 1.3, height, 1.3);
@@ -119,7 +121,7 @@ for (let i = 0; i < 12; i++) {
   if (i % 2 === 0) brazier(Math.sin(a) * 15.8, Math.cos(a) * 15.8, i / 2);
 }
 for (let i = 0; i < 115; i++) {
-  const a = range(0, TAU), r = range(18.2, 21.5), s = range(0.12, 0.6);
+  const a = range(0, TAU), r = range(35.8, 38.5), s = range(0.12, 0.6);
   const rubble = mesh(scene, geo.box, random() > 0.5 ? materials.stone : materials.darkStone, Math.sin(a) * r, s * 0.3, Math.cos(a) * r, s, s * 0.7, range(0.2, 0.8)); rubble.rotation.set(range(-0.4, 0.4), range(0, TAU), range(-0.2, 0.2));
 }
 for (let i = 0; i < 14; i++) {
@@ -131,6 +133,102 @@ mesh(altar, geo.box, materials.darkStone, 0, 0.4, 0, 4.2, 0.8, 2);
 mesh(altar, geo.box, materials.edge, 0, 0.9, 0, 4.6, 0.25, 2.3);
 mesh(altar, geo.box, materials.cloth, 0, 1.05, 0, 1.3, 0.05, 2.4);
 mesh(altar, geo.oct, materials.bone, 0, 1.35, 0, 0.3, 0.3, 0.25);
+
+// District landmarks use shared low-poly geometry; clear lanes lead to every chest.
+const obstacles = [];
+function landmark(group, geometry, material, x, y, z, sx, sy, sz, radius) {
+  const object = mesh(group, geometry, material, x, y, z, sx, sy, sz);
+  obstacles.push({ x: group.position.x + x, z: group.position.z + z, radius });
+  return object;
+}
+for (const [index, region] of REGIONS.entries()) {
+  if (!index) continue;
+  const g = new THREE.Group(); g.position.set(region.x, 0, region.z); scene.add(g);
+  const paving = mesh(g, geo.cylinder, mat(region.color), 0, -0.06, 0, 8, 0.08, 8); paving.castShadow = false;
+  ring(g, 8.2, region.color, 0.45);
+  // Low perimeter features leave the center and cardinal approaches open.
+  for (let i = 0; i < 8; i++) {
+    const a = (i + 0.5) * TAU / 8, x = Math.sin(a) * 7, z = Math.cos(a) * 7;
+    if (index === 1) {
+      landmark(g, geo.box, materials.stone, x, 0.65, z, 0.8, 1.3, 0.4, 0.6);
+      mesh(g, geo.box, materials.bone, x, 1, z - 0.23, 0.5, 0.1, 0.08);
+    } else if (index === 2) {
+      const crystal = landmark(g, geo.oct, materials.blue, x, 1, z, 0.5, 1.8, 0.5, 0.65); crystal.rotation.z = (i % 2 ? 1 : -1) * 0.25;
+    } else if (index === 3) {
+      landmark(g, geo.box, materials.darkStone, x, 0.8, z, 1.6, 1.6, 0.6, 1);
+      for (let j = 0; j < 4; j++) mesh(g, geo.box, j % 2 ? materials.cloth : materials.gold, x - 0.5 + j * 0.3, 0.9, z - 0.35, 0.2, 0.8, 0.16);
+    } else {
+      landmark(g, geo.cylinder, materials.gold, x, 0.45, z, 0.7, 0.9, 0.7, 0.85);
+      mesh(g, geo.ico, materials.eye, x, 1.05, z, 0.22, 0.3, 0.22);
+    }
+  }
+  for (let j = 1; j < 7; j++) {
+    const tile = mesh(scene, geo.box, materials.edge, region.x * j / 8, -0.015, region.z * j / 8, 2.2, 0.025, 2.2); tile.castShadow = false;
+  }
+}
+const shrinePosition = new THREE.Vector3(0, 0, -14);
+ring(scene, 2, '#96dfbd', 0.7).position.z = -14;
+glow(scene, '#96dfbd', 3, 0, 1, -14);
+const chests = createChests().map(data => {
+  const object = new THREE.Group(); object.position.set(data.x, 0, data.z); scene.add(object);
+  mesh(object, geo.box, materials.black, 0, 0.4, 0, 1.4, 0.8, 0.95);
+  for (const x of [-0.5, 0.5]) mesh(object, geo.box, materials.gold, x, 0.43, 0, 0.1, 0.86, 1);
+  const lid = new THREE.Group(); lid.position.set(0, 0.8, 0.48); object.add(lid);
+  mesh(lid, geo.box, materials.gold, 0, 0.08, -0.48, 1.45, 0.18, 1);
+  const beacon = glow(object, data.rare ? '#e7b85c' : '#b1e1ed', 2.8, 0, 1.1, 0);
+  return { ...data, object, lid, beacon };
+});
+function resolveScenery(position, padding = 0.55) {
+  for (const o of obstacles) {
+    const dx = position.x - o.x, dz = position.z - o.z, d = Math.hypot(dx, dz), min = o.radius + padding;
+    if (d < min) { position.x = o.x + (d > 0.001 ? dx / d : 1) * min; position.z = o.z + (d > 0.001 ? dz / d : 0) * min; }
+  }
+  constrainPosition(position);
+}
+function interactionTarget() {
+  return chests.find(c => !c.opened && c.object.position.distanceTo(player.position) < 2.5);
+}
+function interact() {
+  if (state !== 'playing') return;
+  if (nearbyWeapon()) { equipDrop(nearbyWeapon()); return; }
+  const chest = interactionTarget();
+  if (chest) {
+    const loot = openChest(chest, stats);
+    chest.beacon.visible = false;
+    announce('+' + loot.gold + ' GOLD · ' + loot.name.toUpperCase());
+    burst(chest.object.position, 20, '#eac277'); tone(440, 0.3, 'sine', 0.05, 880);
+  } else if (player.position.distanceTo(shrinePosition) < 3) {
+    if (buyHealing(stats)) { flashRing(player.position, 3, '#96dfbd'); announce('RESTORED 50 HEALTH'); }
+    else announce(stats.hp >= stats.maxHp ? 'HEALTH IS FULL' : 'NEED 30 GOLD');
+  }
+  updateHud();
+}
+const mapContext = $('minimap').getContext('2d');
+function updateExplorationHud() {
+  const region = REGIONS.reduce((best, r) => Math.hypot(player.position.x - r.x, player.position.z - r.z) < Math.hypot(player.position.x - best.x, player.position.z - best.z) ? r : best);
+  $('region').textContent = region.name;
+  $('gold').textContent = stats.gold + ' GOLD';
+  $('chest-count').textContent = chests.filter(c => c.opened).length + '/12 CHESTS';
+  const chest = interactionTarget(), shrine = player.position.distanceTo(shrinePosition) < 3;
+  const weaponDrop = nearbyWeapon();
+  $('interact').hidden = state !== 'playing' || (!chest && !shrine && !weaponDrop);
+  $('interact').textContent = chest ? 'E · OPEN ' + (chest.rare ? 'RARE ' : '') + 'CHEST' : 'E · HEAL 50 HP · 30 GOLD';
+  if (weaponDrop) {
+    const info = weaponInfo(weaponDrop.weapon), next = weaponStats(stats, weaponDrop.weapon);
+    $('interact').textContent = `E · SWAP: ${info.name} · ${Math.round(next.damage)} DMG / ${next.attackDelay.toFixed(2)}s / ${next.range.toFixed(1)} REACH`;
+  }
+  const current = weaponStats(stats, equippedWeapon);
+  $('weapon-name').textContent = weaponInfo(equippedWeapon).name;
+  $('weapon-details').textContent = `${Math.round(current.damage)} DMG · ${current.attackDelay.toFixed(2)}s · ${current.range.toFixed(1)} REACH`;
+  $('wallet-status').textContent = walletSaved ? 'WALLET · KEPT ON DEATH' : 'WALLET · SESSION ONLY';
+  const c = mapContext, scale = 1.65;
+  c.clearRect(0, 0, 128, 128); c.strokeStyle = '#8b8063'; c.beginPath(); c.arc(64, 64, ARENA_RADIUS * scale, 0, TAU); c.stroke();
+  for (const r of REGIONS) { c.fillStyle = r.color; c.globalAlpha = 0.3; c.beginPath(); c.arc(64 + r.x * scale, 64 + r.z * scale, 10, 0, TAU); c.fill(); }
+  c.globalAlpha = 1;
+  for (const chest of chests) { c.fillStyle = chest.opened ? '#5a625c' : '#f0c96c'; c.fillRect(62 + chest.x * scale, 62 + chest.z * scale, 4, 4); }
+  c.fillStyle = '#96dfbd'; c.fillRect(61, 61 - 14 * scale, 6, 6);
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(64 + player.position.x * scale, 64 + player.position.z * scale, 3, 0, TAU); c.fill();
+}
 
 function makeActor(kind) {
   const g = new THREE.Group(), hero = kind === 'hero', brute = kind === 'brute' || kind === 'boss', caster = kind === 'caster';
@@ -181,12 +279,20 @@ const previewDemons = [];
 for (let i = 0; i < 7; i++) { const d = makeActor(i === 0 ? 'brute' : i === 4 ? 'caster' : 'stalker'); const a = i * TAU / 7; d.position.set(Math.sin(a) * (5 + i % 3), 0, Math.cos(a) * (5 + i % 3)); d.rotation.y = Math.atan2(-d.position.x, -d.position.z) + Math.PI; scene.add(d); previewDemons.push(d); }
 
 let state = 'intro', stats = createStats(), wave = 0, kills = 0, souls = 0, elapsed = 0, timer = 0;
+let equippedWeapon = makeWeapon(), drops = [], walletSaved = true;
+let walletStorage;
+try { walletStorage = window.localStorage; } catch { /* Session wallet remains usable. */ }
+stats.gold = loadWallet(walletStorage);
+walletSaved = Boolean(walletStorage);
+let savedGold = stats.gold;
 let enemies = [], spawns = [], shots = [], effects = [], particles = [], orbiters = [], choices = [];
 let pending = 0, spawnClock = 0, config, bossPending = false, attackCd = 0, novaCd = 0, dashCd = 0, dashTime = 0, invulnerable = 0, shake = 0, attackAnim = 0, attackCount = 0;
 let autoAttack = true, mouseHeld = false, pointerSeen = false, aim = 0, hitStop = 0;
 const keys = new Set(), pointer = new THREE.Vector2(), raycaster = new THREE.Raycaster(), aimPoint = new THREE.Vector3(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const move = new THREE.Vector3(), dashDirection = new THREE.Vector3(0, 0, -1), joystick = { x: 0, y: 0, id: null };
 const giftCounts = new Map();
+let selectedClass = 'reaver', classProgress = createClassState(), classPathOpen = false;
+const classAura = ring(scene, 1, '#ef8d78', 0.6, 0.15); classAura.visible = false;
 let audio, soundOn = false;
 function tone(frequency = 100, duration = 0.12, type = 'sine', volume = 0.06, end = 30) {
   if (!soundOn || !audio) return;
@@ -234,13 +340,81 @@ function lightning(from, to) {
   const points = []; for (let i = 0; i <= 7; i++) { const p = from.clone().lerp(to, i / 7); p.y += 1; if (i > 0 && i < 7) { p.x += range(-0.5, 0.5); p.z += range(-0.5, 0.5); } points.push(p); }
   const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: '#b1e9ff', transparent: true })); line.userData.ownedGeometry = true; addEffect(line, 0.22, (o, t) => { o.material.opacity = t; });
 }
+function persistGold() {
+  stats.gold = normalizeGold(stats.gold);
+  walletSaved = saveWallet(walletStorage, stats.gold); savedGold = stats.gold;
+}
+function weaponModel(parent, weapon) {
+  const material = weapon.id === 'axe' ? materials.gold : weapon.id === 'dagger' ? materials.bone : materials.blade;
+  const length = weapon.id === 'spear' ? 2.5 : weapon.id === 'dagger' ? 0.8 : 1.6;
+  mesh(parent, geo.box, materials.gold, 0, 0.04, -0.05, 0.4, 0.12, 0.12);
+  mesh(parent, geo.box, material, 0, 0.04, -length / 2, 0.14, 0.07, length);
+  mesh(parent, weapon.id === 'axe' ? geo.box : geo.oct, material, 0, 0.04, -length, weapon.id === 'axe' ? 0.8 : 0.12, 0.09, 0.3);
+}
+function refreshWeaponModel() {
+  player.userData.sword.clear(); weaponModel(player.userData.sword, equippedWeapon);
+}
+function nearbyWeapon() {
+  let nearest, distance = 2.5;
+  for (const drop of drops) {
+    const d = Math.hypot(drop.object.position.x - player.position.x, drop.object.position.z - player.position.z);
+    if (drop.type === 'weapon' && d < distance) { nearest = drop; distance = d; }
+  }
+  return nearest;
+}
+function spawnDrop(loot, position) {
+  // Bound scene objects, merging gold stacks instead of losing their value.
+  if (drops.length >= 80) {
+    const old = drops.find(d => d.type === 'weapon');
+    if (old) { scene.remove(old.object); drops.splice(drops.indexOf(old), 1); }
+    else if (loot.type === 'gold') { drops[0].amount += loot.amount; return; }
+    else { drops[1].amount += drops[0].amount; scene.remove(drops[0].object); drops.shift(); }
+  }
+  const object = new THREE.Group(); object.position.copy(position);
+  object.position.x += loot.type === 'weapon' ? 0.7 : -0.4; constrainPosition(object.position);
+  if (loot.type === 'gold') mesh(object, geo.cylinder, materials.gold, 0, 0, 0, 0.3, 0.12, 0.3);
+  else {
+    weaponModel(object, loot.weapon);
+    mesh(object, geo.oct, materials.blue, 0, 0.25, 0, 0.13, 0.4, 0.13);
+  }
+  object.position.y = 0.5; scene.add(object);
+  drops.push({ ...loot, object, phase: Math.random() * TAU });
+}
+function equipDrop(drop) {
+  if (state !== 'playing' || !drops.includes(drop)) return;
+  const old = equippedWeapon; equippedWeapon = drop.weapon;
+  scene.remove(drop.object); drops.splice(drops.indexOf(drop), 1);
+  spawnDrop({ type: 'weapon', weapon: old }, player.position);
+  refreshWeaponModel(); announce(weaponInfo(equippedWeapon).name.toUpperCase() + ' EQUIPPED');
+  tone(520, 0.16, 'sine', 0.04, 780); updateHud();
+}
+function updateDrops(dt) {
+  let collected = 0;
+  for (let i = drops.length - 1; i >= 0; i--) {
+    const drop = drops[i], p = drop.object.position;
+    p.y = 0.5 + Math.sin(timer * 3 + drop.phase) * 0.12; drop.object.rotation.y += dt * 0.8;
+    if (drop.type === 'gold' && Math.hypot(p.x - player.position.x, p.z - player.position.z) < 2) {
+      collected += drop.amount; scene.remove(drop.object); drops.splice(i, 1);
+    }
+  }
+  if (collected) {
+    stats.gold += collected; persistGold();
+    floating(`+${collected} GOLD`, player.position, '#f0c96c'); tone(640, 0.09, 'sine', 0.025, 900);
+  }
+}
 function startRun() {
   for (const d of previewDemons) scene.remove(d);
   for (const e of enemies) scene.remove(e.mesh);
   for (const list of [spawns, shots, effects, particles]) for (const e of list) disposeObject(e.object);
   for (const o of orbiters) scene.remove(o);
   enemies = []; spawns = []; shots = []; effects = []; particles = []; orbiters = [];
-  stats = createStats(); wave = kills = souls = elapsed = timer = attackCount = 0; giftCounts.clear();
+  for (const chest of chests) { chest.opened = false; chest.lid.rotation.x = 0; chest.beacon.visible = true; }
+  const carriedGold = stats.gold;
+  for (const drop of drops) scene.remove(drop.object);
+  drops = []; equippedWeapon = makeWeapon(); refreshWeaponModel();
+  stats = createStats(); stats.gold = carriedGold; wave = kills = souls = elapsed = timer = attackCount = 0; giftCounts.clear();
+  classProgress = createClassState(selectedClass); classPathOpen = false; classAura.visible = false;
+  renderClassSlots();
   attackCd = novaCd = dashCd = dashTime = invulnerable = hitStop = shake = 0; keys.clear(); mouseHeld = false;
   player.position.set(0, 0, 2); player.rotation.set(0, 0, 0); player.visible = true; aim = 0;
   $('gifts').innerHTML = '<span class="muted">Power comes at a price.</span>'; $('boss-hud').hidden = true; $('floaters').replaceChildren();
@@ -253,8 +427,9 @@ function nextWave() {
   announce(config.boss ? 'THE WARDEN AWAKENS' : `WAVE ${String(wave).padStart(2, '0')} · ${wave === 1 ? 'FIRST BLOOD' : 'THE DESCENT CONTINUES'}`);
 }
 function prepareSpawn(kind) {
-  const a = Math.random() * TAU; const p = new THREE.Vector3(Math.sin(a) * 15.8, 0, Math.cos(a) * 15.8);
-  if (p.distanceTo(player.position) < 6) p.negate();
+  const a = Math.random() * TAU; const p = new THREE.Vector3(player.position.x + Math.sin(a) * 13, 0, player.position.z + Math.cos(a) * 13);
+  constrainPosition(p);
+  if (p.distanceTo(player.position) < 7) { p.copy(player.position).multiplyScalar(0.6); if (p.distanceTo(player.position) < 7) p.set(0, 0, 14); }
   const r = ring(scene, kind === 'boss' ? 2.2 : 0.9, '#e0523a', 0.7); r.position.x = p.x; r.position.z = p.z; r.userData.ownedMaterial = true;
   spawns.push({ object: r, position: p, kind, life: 1.0 });
 }
@@ -273,6 +448,7 @@ function damageEnemy(enemy, amount, critical = false, frost = false) {
   if (enemy.hp <= 0) {
     enemy.dead = true; kills++; souls += enemy.kind === 'boss' ? 100 : enemy.kind === 'brute' ? 15 : 5;
     if (stats.leech) heal(stats, stats.leech);
+    for (const loot of rollLoot(enemy.kind, wave, Math.random, kills === 1)) spawnDrop(loot, enemy.mesh.position);
     burst(enemy.mesh.position, enemy.kind === 'boss' ? 36 : 13, '#cb6b42'); flashRing(enemy.mesh.position, enemy.radius * 1.4, '#9d473b', 0.35);
     if (enemy.kind === 'boss') { $('boss-hud').hidden = true; announce('THE WARDEN FALLS'); shake = 0.5; }
     scene.remove(enemy.mesh); tone(85, 0.12, 'triangle', 0.025, 25);
@@ -280,6 +456,8 @@ function damageEnemy(enemy, amount, critical = false, frost = false) {
 }
 function receiveDamage(amount) {
   if (state !== 'playing' || invulnerable > 0 || dashTime > 0) return;
+  amount = absorbClassDamage(classProgress, amount);
+  if (amount <= 0) { invulnerable = 0.65; flashRing(player.position, 1.5, '#e4ce8d', 0.25); return; }
   stats.hp = Math.max(0, stats.hp - amount); invulnerable = 0.65; shake = 0.3;
   floating(`−${Math.round(amount)}`, player.position, '#f48b75'); tone(65, 0.24, 'sawtooth', 0.05, 22);
   $('damage-flash').style.opacity = 0.55; setTimeout(() => { $('damage-flash').style.opacity = 0; }, 150);
@@ -287,8 +465,9 @@ function receiveDamage(amount) {
 }
 function rend() {
   if (state !== 'playing' || attackCd > 0 || dashTime > 0) return;
-  attackCd = stats.attackDelay; attackAnim = 0.23; attackCount++;
-  const geometry = new THREE.RingGeometry(stats.range * 0.68, stats.range, 28, 1, -1.05, 2.1);
+  const combat = weaponStats(stats, equippedWeapon);
+  attackCd = combat.attackDelay; attackAnim = 0.23; attackCount++;
+  const geometry = new THREE.RingGeometry(combat.range * 0.68, combat.range, 28, 1, -1.05, 2.1);
   const arc = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: stats.frost ? '#9ceaff' : '#ead5a8', side: THREE.DoubleSide, transparent: true, opacity: 0.65, blending: THREE.AdditiveBlending, depthWrite: false }));
   arc.rotation.set(-Math.PI / 2, 0, Math.PI / 2 - aim); arc.position.copy(player.position); arc.position.y = 0.6; arc.userData.ownedGeometry = true;
   addEffect(arc, 0.20, (o, t) => { o.material.opacity = t * 0.65; o.scale.setScalar(1 + (1 - t) * 0.15); });
@@ -297,11 +476,11 @@ function rend() {
     if (e.dead) continue;
     const dx = e.mesh.position.x - player.position.x, dz = e.mesh.position.z - player.position.z, dist = Math.hypot(dx, dz);
     const dot = dist < 0.01 ? 1 : (Math.sin(aim) * dx - Math.cos(aim) * dz) / dist;
-    if (dist < stats.range + e.radius && (dot > 0.2 || dist < 1.25)) { const crit = Math.random() < stats.crit; damageEnemy(e, stats.damage * (crit ? 2 : 1), crit, !!stats.frost); if (!e.dead && dist > 0.01) { e.mesh.position.x += dx / dist * 0.4; e.mesh.position.z += dz / dist * 0.4; } hit = true; }
+    if (dist < combat.range + e.radius && (dot > 0.2 || dist < 1.25)) { const crit = Math.random() < stats.crit; damageEnemy(e, combat.damage * (crit ? 2 : 1), crit, !!stats.frost); if (!e.dead && dist > 0.01) { e.mesh.position.x += dx / dist * 0.4; e.mesh.position.z += dz / dist * 0.4; } hit = true; }
   }
   if (stats.lightning && attackCount % 3 === 0) {
     let origin = player.position; const candidates = enemies.filter(e => !e.dead && e.mesh.position.distanceTo(player.position) < 10).sort((a, b) => a.mesh.position.distanceTo(player.position) - b.mesh.position.distanceTo(player.position)).slice(0, 3);
-    for (const e of candidates) { lightning(origin, e.mesh.position); damageEnemy(e, stats.damage * 0.65 * stats.lightning); origin = e.mesh.position; }
+    for (const e of candidates) { lightning(origin, e.mesh.position); damageEnemy(e, combat.damage * 0.65 * stats.lightning); origin = e.mesh.position; }
   }
   tone(hit ? 130 : 200, 0.08, hit ? 'triangle' : 'sine', hit ? 0.045 : 0.015, 40);
   if (hit) { hitStop = 0.025; shake = Math.max(shake, 0.07); }
@@ -325,6 +504,10 @@ function useElixir() {
 }
 function clearWave() {
   state = 'upgrade'; mouseHeld = false; keys.clear();
+  const unlocked = unlockClassWave(classProgress, wave);
+  resetClassCombat(classProgress); classAura.visible = false;
+  $('class-unlock').hidden = !unlocked.length;
+  $('class-unlock').textContent = unlocked.map(a => `${a.icon} ${a.name} unlocked · Press ${a.key} next wave — ${a.description}`).join(' ');
   for (const s of shots) disposeObject(s.object); shots = [];
   heal(stats, stats.maxHp * 0.25); stats.flasks = Math.min(3, stats.flasks + 1); novaCd = dashCd = 0;
   choices = chooseBlessings(stats); $('upgrade-sub').textContent = `Wave ${wave} survived. One gift. A little less of your humanity.`;
@@ -341,16 +524,21 @@ function selectBlessing(index) {
 }
 function die() {
   state = 'dead'; keys.clear(); mouseHeld = false;
+  resetClassCombat(classProgress); classAura.visible = false;
   burst(player.position, 35, '#c1cecc'); player.visible = false;
   let best = wave; try { best = Math.max(wave, Number(localStorage.getItem('ashen-covenant-best')) || 0); localStorage.setItem('ashen-covenant-best', String(best)); } catch { /* Storage is optional. */ }
   $('death-stats').textContent = `You reached wave ${wave}, slew ${kills} demons, and claimed ${souls} souls in ${Math.floor(elapsed / 60)}m ${Math.floor(elapsed % 60)}s.`;
+  $('death-stats').textContent += ' Your wallet keeps ' + stats.gold + ' gold' + (walletSaved ? '.' : ' for this session.');
   $('best').textContent = `DEEPEST DESCENT · WAVE ${best}`; setPanel('death-panel'); updateHud();
 }
 function togglePause() {
   if (state === 'playing') { state = 'paused'; keys.clear(); mouseHeld = false; setPanel('pause-panel'); }
-  else if (state === 'paused') { state = 'playing'; setPanel(null); }
+  else if (state === 'paused') { classPathOpen = false; state = 'playing'; setPanel(null); }
 }
 function updateHud() {
+  if (stats.gold !== savedGold) persistGold();
+  updateClassHud();
+  updateExplorationHud();
   $('health-label').textContent = `${Math.ceil(stats.hp)} / ${stats.maxHp}`; $('health-fill').style.width = `${stats.hp / stats.maxHp * 100}%`;
   $('kills').textContent = kills; $('souls').textContent = souls; $('flasks').textContent = `ELIXIR · ${stats.flasks}`;
   $('nova-cd').style.height = `${Math.max(0, novaCd) / stats.novaDelay * 100}%`; $('dash-cd').style.height = `${Math.max(0, dashCd) / stats.dashDelay * 100}%`;
@@ -366,6 +554,8 @@ function shoot(enemy, direction, speed = 5) {
 function updateEnemies(dt) {
   for (const e of enemies) {
     if (e.dead) continue;
+    e.frozen = Math.max(0, (e.frozen || 0) - dt);
+    if (e.frozen > 0) continue;
     e.cooldown -= dt; e.slow = Math.max(0, e.slow - dt); e.stun = Math.max(0, e.stun - dt); e.special -= dt;
     const p = e.mesh.position, dx = player.position.x - p.x, dz = player.position.z - p.z, dist = Math.hypot(dx, dz), dir = new THREE.Vector3(dx, 0, dz).normalize();
     e.mesh.rotation.y = Math.atan2(dx, dz) + Math.PI;
@@ -399,7 +589,7 @@ function updateEnemies(dt) {
       const ox = p.x - other.mesh.position.x, oz = p.z - other.mesh.position.z, d = Math.hypot(ox, oz), minimum = (e.radius + other.radius) * 0.65;
       if (d > 0.01 && d < minimum) { p.x += ox / d * dt; p.z += oz / d * dt; }
     }
-    constrainPosition(p);
+    resolveScenery(p, e.radius * 0.6);
     e.mesh.userData.leftLeg.rotation.x = moving ? Math.sin(timer * 10 + p.x) * 0.45 : 0;
     e.mesh.userData.rightLeg.rotation.x = -e.mesh.userData.leftLeg.rotation.x;
     e.mesh.position.y = e.stun > 0 ? Math.sin(e.stun * 35) * 0.06 : 0;
@@ -412,11 +602,11 @@ function updatePlaying(dt) {
   if (move.length() > 1) move.normalize();
   if (dashTime > 0) { dashTime -= dt; player.position.addScaledVector(dashDirection, dt * 27); if (Math.random() < 0.5) burst(player.position, 2, '#9cd8ec', 0.5); }
   else player.position.addScaledVector(move, dt * stats.speed);
-  constrainPosition(player.position);
+  resolveScenery(player.position);
   let nearest = null, nearestDistance = Infinity;
   for (const e of enemies) { if (e.dead) continue; const d = e.mesh.position.distanceTo(player.position); if (d < nearestDistance) { nearestDistance = d; nearest = e; } }
   if (mouseHeld && pointerSeen) { raycaster.setFromCamera(pointer, camera); if (raycaster.ray.intersectPlane(groundPlane, aimPoint)) aim = Math.atan2(aimPoint.x - player.position.x, -(aimPoint.z - player.position.z)); }
-  else if (autoAttack && nearest && nearestDistance < stats.range + 2) aim = Math.atan2(nearest.mesh.position.x - player.position.x, -(nearest.mesh.position.z - player.position.z));
+  else if (autoAttack && nearest && nearestDistance < weaponStats(stats, equippedWeapon).range + 2) aim = Math.atan2(nearest.mesh.position.x - player.position.x, -(nearest.mesh.position.z - player.position.z));
   else if (move.lengthSq() > 0.01) aim = Math.atan2(move.x, -move.z);
   player.rotation.y = -aim;
   player.userData.leftLeg.rotation.x = move.lengthSq() > 0.01 ? Math.sin(timer * 13) * 0.6 : 0;
@@ -424,8 +614,9 @@ function updatePlaying(dt) {
   player.userData.cape.rotation.x = -0.18 + Math.sin(timer * 9) * 0.06 + move.length() * -0.25;
   player.userData.sword.rotation.y = attackAnim > 0 ? Math.sin((1 - attackAnim / 0.23) * Math.PI) * 1.8 - 0.7 : 0;
   player.visible = invulnerable > 0 ? Math.sin(timer * 50) > -0.5 : true;
-  if (mouseHeld || (autoAttack && nearest && nearestDistance < stats.range + nearest.radius)) rend();
+  if (mouseHeld || (autoAttack && nearest && nearestDistance < weaponStats(stats, equippedWeapon).range + nearest.radius)) rend();
   if (keys.has('KeyQ')) nova(); if (keys.has('Space')) dash(); if (keys.has('KeyR')) useElixir();
+  tickClassCombat(classProgress, dt, classContext());
   spawnClock -= dt;
   if (spawnClock <= 0 && enemies.length + spawns.length < MAX_ACTIVE_ENEMIES) {
     if (bossPending) { prepareSpawn('boss'); bossPending = false; spawnClock = 1.8; }
@@ -443,18 +634,141 @@ function updatePlaying(dt) {
     const a = timer * 2.5 + i * TAU / orbiters.length; o.position.set(player.position.x + Math.sin(a) * 2.5, 0.8, player.position.z + Math.cos(a) * 2.5); o.rotation.y = a;
     for (const e of enemies) if (!e.dead && e.mesh.position.distanceTo(o.position) < e.radius + 0.65 && (e.orbitHit || 0) < timer) { e.orbitHit = timer + 0.45; damageEnemy(e, stats.damage * 0.7); }
   });
+  if (state === 'playing') updateDrops(dt);
   if (state === 'playing' && pending === 0 && !bossPending && spawns.length === 0 && enemies.every(e => e.dead)) clearWave();
 }
 function updateEffects(dt) {
   for (let i = effects.length - 1; i >= 0; i--) { const e = effects[i]; e.life -= dt; if (e.life <= 0) { disposeObject(e.object); effects.splice(i, 1); } else e.update(e.object, e.life / e.max); }
   for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; p.life -= dt; p.velocity.y -= dt * 12; p.object.position.addScaledVector(p.velocity, dt); p.object.scale.setScalar(Math.max(0.1, p.life * 2)); if (p.life <= 0 || p.object.position.y < 0) { disposeObject(p.object); particles.splice(i, 1); } }
 }
-$('start').onclick = startRun; $('restart').onclick = startRun; $('resume').onclick = togglePause; $('pause').onclick = togglePause;
+function classPathMarkup(progress, preview = false) {
+  return getClass(progress.id).abilities.map((a, slot) => {
+    const unlocked = !preview && abilityStatus(progress, slot) !== 'locked';
+    return `<article class="path-ability${unlocked ? ' unlocked' : ''}"><span class="path-icon">${a.icon}</span><div><span class="eyebrow">${unlocked ? 'UNLOCKED' : `CLEAR WAVE ${a.wave}`} · ${a.cooldown}s RECHARGE</span><h3><kbd>${a.key}</kbd> ${a.name}</h3><p>${a.description}</p></div></article>`;
+  }).join('');
+}
+function chooseClass() {
+  state = 'class-select'; keys.clear(); mouseHeld = false; classPathOpen = false;
+  document.body.classList.remove('playing');
+  const container = $('class-choices'); container.replaceChildren();
+  for (const archetype of CLASSES) {
+    const button = document.createElement('button'); button.className = 'class-choice'; button.dataset.classId = archetype.id;
+    button.style.setProperty('--class-color', archetype.color);
+    button.innerHTML = `<span>${archetype.icon}</span><b>${archetype.name}</b><small>${archetype.role}</small>`;
+    button.onclick = () => selectClass(archetype.id); container.appendChild(button);
+  }
+  selectClass(selectedClass); setPanel('class-panel');
+}
+function selectClass(id) {
+  selectedClass = getClass(id).id;
+  for (const button of $('class-choices').children) button.setAttribute('aria-pressed', String(button.dataset.classId === selectedClass));
+  $('class-preview').innerHTML = classPathMarkup(createClassState(selectedClass), true);
+  $('class-start').textContent = `ENTER AS ${getClass(selectedClass).name.toUpperCase()} →`;
+}
+function renderClassSlots() {
+  const archetype = getClass(classProgress.id); const container = $('class-slots'); container.replaceChildren();
+  $('class-hud').style.setProperty('--class-color', archetype.color);
+  $('class-info').innerHTML = `${archetype.name.toUpperCase()} · CLASS PATH <kbd>K</kbd>`;
+  archetype.abilities.forEach((a, slot) => {
+    const button = document.createElement('button'); button.className = 'ability class-ability'; button.id = `class-slot-${slot}`;
+    button.innerHTML = `<kbd>${a.key}</kbd><span class="ability-glyph">${a.icon}</span><small>${a.name.toUpperCase()}</small><span class="class-state"></span><i class="cooldown"></i>`;
+    button.onclick = () => useClassAbility(slot); container.appendChild(button);
+  });
+  updateClassHud();
+}
+function updateClassHud() {
+  getClass(classProgress.id).abilities.forEach((a, slot) => {
+    const button = $(`class-slot-${slot}`); if (!button) return;
+    const status = abilityStatus(classProgress, slot), locked = status === 'locked';
+    button.disabled = status !== 'ready' || state !== 'playing'; button.classList.toggle('locked', locked);
+    const label = locked ? `CLEAR WAVE ${a.wave}` : status === 'cooldown' ? `${Math.ceil(classProgress.cooldowns[slot])}s` : 'READY';
+    button.querySelector('.class-state').textContent = label;
+    button.querySelector('.cooldown').style.height = `${classProgress.cooldowns[slot] / a.cooldown * 100}%`;
+    button.title = `${a.name} [${a.key}] — ${a.description} ${label}`;
+    button.setAttribute('aria-label', `${a.name}, ${a.key}, ${label}`);
+  });
+  const buffs = [];
+  if (classProgress.guard > 0) buffs.push(`IRON SKIN ${Math.ceil(classProgress.guard)}s`);
+  if (classProgress.shield > 0) buffs.push(`BARRIER ${Math.ceil(classProgress.shield)}`);
+  if (classProgress.channel) buffs.push(`${classProgress.channel.ability.name.toUpperCase()} ${Math.ceil(classProgress.channel.remaining)}s`);
+  $('class-buff').textContent = buffs.join(' · ');
+}
+function showClassPath() {
+  if (state !== 'playing' && state !== 'paused') return;
+  state = 'paused'; classPathOpen = true; keys.clear(); mouseHeld = false;
+  $('class-path-title').textContent = `${getClass(classProgress.id).name} · Class path`;
+  $('class-path').innerHTML = classPathMarkup(classProgress); setPanel('class-path-panel');
+}
+function classContext() {
+  return {
+    stats, position: player.position, aim,
+    targets: () => enemies.filter(e => !e.dead).map(e => ({ enemy: e, position: e.mesh.position, radius: e.radius })),
+    hit: (target, amount, freeze) => {
+      damageEnemy(target.enemy, amount, false, freeze > 0);
+      if (freeze && !target.enemy.dead) target.enemy.frozen = Math.max(target.enemy.frozen || 0, target.enemy.kind === 'boss' ? 1 : freeze);
+    },
+    heal: amount => { if (amount > 0) heal(stats, amount); },
+    targetPoint: () => {
+      if (pointerSeen && !coarse) { raycaster.setFromCamera(pointer, camera); if (raycaster.ray.intersectPlane(groundPlane, aimPoint)) return aimPoint; }
+      const nearest = enemies.filter(e => !e.dead).sort((a, b) => a.mesh.position.distanceTo(player.position) - b.mesh.position.distanceTo(player.position))[0];
+      return nearest ? nearest.mesh.position : { x: player.position.x + Math.sin(aim) * 8, z: player.position.z - Math.cos(aim) * 8 };
+    },
+    visual: classVisual,
+  };
+}
+function useClassAbility(slot) {
+  if (state !== 'playing') return;
+  if (pointerSeen && !coarse) {
+    raycaster.setFromCamera(pointer, camera);
+    if (raycaster.ray.intersectPlane(groundPlane, aimPoint)) aim = Math.atan2(aimPoint.x - player.position.x, -(aimPoint.z - player.position.z));
+  }
+  const ability = castClassAbility(classProgress, slot, classContext());
+  if (ability) { tone(ability.id === 'meteor' ? 100 : 260, 0.25, 'triangle', 0.04, 60); updateClassHud(); }
+}
+function classVisual(event, ability, point) {
+  const position = new THREE.Vector3(point.x, 0, point.z), color = getClass(classProgress.id).color;
+  if (ability.id === 'meteor') {
+    if (event === 'cast') {
+      const tell = ring(scene, ability.radius, '#ee9957', 0.65); tell.position.copy(position); tell.position.y = 0.12;
+      addEffect(tell, 0.8, (o, t) => { o.material.opacity = 0.3 + (1 - t) * 0.6; });
+      const meteor = new THREE.Mesh(geo.ico, new THREE.MeshBasicMaterial({ color: '#ffc17b' })); meteor.position.copy(position); meteor.scale.setScalar(0.7);
+      addEffect(meteor, 0.8, (o, t) => { o.position.y = 14 * t; o.rotation.x += 0.1; o.rotation.z += 0.1; });
+    } else { flashRing(position, ability.radius, '#ffb16a'); burst(position, 32, '#ffc17b', 1.8); shake = Math.max(shake, 0.3); tone(60, 0.35, 'sawtooth', 0.045, 18); }
+    return;
+  }
+  if (ability.id === 'hellfire-lance') {
+    const end = position.clone().add(new THREE.Vector3(Math.sin(aim) * ability.range, 0, -Math.cos(aim) * ability.range));
+    lightning(position, end); flashRing(end, 1.5, '#f7af72', 0.3);
+    const beam = new THREE.Mesh(geo.box, new THREE.MeshBasicMaterial({ color: '#ffc88c', transparent: true, opacity: 0.65, blending: THREE.AdditiveBlending, depthWrite: false }));
+    beam.position.copy(position).lerp(end, 0.5); beam.position.y = 0.8; beam.rotation.y = -aim; beam.scale.set(0.65, 0.5, ability.range);
+    addEffect(beam, 0.3, (o, t) => { o.material.opacity = t * 0.65; });
+  } else {
+    flashRing(position, ability.radius || 2, ability.id === 'frost-prison' ? '#a2e8ff' : color, event === 'pulse' ? 0.3 : 0.55);
+    if (event === 'cast') burst(position, 16, color);
+  }
+}
+function updateClassAura() {
+  const active = classProgress.guard > 0 || classProgress.shield > 0 || classProgress.channel;
+  classAura.visible = !!active && (state === 'playing' || state === 'paused');
+  if (!active) return;
+  classAura.position.set(player.position.x, 0.15, player.position.z);
+  classAura.scale.setScalar(classProgress.channel?.ability.radius || 1.4);
+  classAura.material.color.set(getClass(classProgress.id).color);
+  classAura.material.opacity = 0.4 + Math.sin(timer * 5) * 0.15;
+}
+$('interact').onclick = interact;
+$('start').onclick = chooseClass; $('restart').onclick = chooseClass; $('resume').onclick = togglePause; $('pause').onclick = togglePause;
+$('class-start').onclick = startRun;
+$('class-info').onclick = showClassPath;
+$('class-back').onclick = togglePause;
 $('nova').onclick = nova; $('dash').onclick = dash; $('heal').onclick = useElixir; $('attack').onclick = rend;
 $('auto').onclick = () => { autoAttack = !autoAttack; $('auto').classList.toggle('active', autoAttack); $('auto').setAttribute('aria-pressed', String(autoAttack)); };
 addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) && state === 'playing') e.preventDefault();
+  if (e.code === 'KeyE' && !e.repeat) interact();
   if (e.code === 'Escape' && !e.repeat) togglePause();
+  if (e.code === 'KeyK' && !e.repeat) { if (classPathOpen) togglePause(); else showClassPath(); }
+  if (!e.repeat && CLASS_KEYS.includes(e.code)) useClassAbility(CLASS_KEYS.indexOf(e.code));
   if (state === 'upgrade' && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) selectBlessing(Number(e.code.slice(-1)) - 1);
   if (state === 'playing') keys.add(e.code);
 });
@@ -482,12 +796,13 @@ function animate() {
   if (hitStop > 0) { hitStop -= dt; dt *= 0.12; }
   if (state === 'playing') updatePlaying(dt);
   updateEffects(dt);
+  for (const chest of chests) if (chest.opened) chest.lid.rotation.x = Math.min(1.9, chest.lid.rotation.x + dt * 5);
   for (const f of flames) f.mesh.scale.y = f.base * (1 + Math.sin(timer * 9 + f.phase) * 0.2);
   if (state === 'intro') {
     cameraTarget.set(-3.5, 0, -0.5); cameraOffset.set(0, 25, 25);
     player.rotation.y = -0.3; player.userData.cape.rotation.x = -0.18 + Math.sin(timer * 2) * 0.05;
   } else {
-    cameraTarget.lerp(new THREE.Vector3(player.position.x * 0.58, 0, player.position.z * 0.58), 1 - Math.exp(-realDt * 4));
+    cameraTarget.lerp(new THREE.Vector3(player.position.x, 0, player.position.z), 1 - Math.exp(-realDt * 4));
     cameraOffset.set(0, innerWidth < 700 ? 30 : 23, innerWidth < 700 ? 26 : 20);
   }
   camera.position.copy(cameraTarget).add(cameraOffset);
@@ -495,6 +810,7 @@ function animate() {
   if (!reducedMotion && shake > 0) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.z += (Math.random() - 0.5) * shake; }
   camera.lookAt(cameraTarget);
   playerLight.position.set(player.position.x, 2.5, player.position.z); playerRing.position.set(player.position.x, 0.03, player.position.z);
+  updateClassAura();
   soulGlow.material.opacity = 0.15 + Math.sin(timer * 3) * 0.03;
   hudClock += realDt; if (hudClock > 0.1) { updateHud(); hudClock = 0; }
   renderer.render(scene, camera);
