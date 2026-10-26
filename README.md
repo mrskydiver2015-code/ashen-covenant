@@ -6,6 +6,7 @@ A top-down, dark-fantasy arena roguelike built with **Three.js 0.169.0**. Surviv
 
 - **WASD / arrows:** move.
 - **Mouse + hold left button:** aim and attack.
+- **TOUCHPAD MOVE toggle:** when ON, hold left mouse or drag on the arena to move toward the cursor. Release to stop; WASD/joystick input takes priority while used. Auto-Rend continues against nearby demons. A short click directly on a demon within weapon reach performs one attack, subject to the normal cooldown. When OFF, holding left mouse retains aim-and-attack behavior.
 - **Auto-rend:** enabled by default; attacks nearby enemies automatically. Toggle it in the bottom-right HUD.
 - **Q:** Soul Nova, a large area attack.
 - **Space:** Shadowstep, a brief invulnerable dash.

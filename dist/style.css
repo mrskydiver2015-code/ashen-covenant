@@ -106,3 +106,18 @@
   header .wave-status { top: 12px; }
   #class-info { min-height: 44px; }
 }
+
+/* Keep movement preferences beside Auto-Rend without shrinking the ability bar. */
+.movement-toggles { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px 12px; }
+.movement-toggles .auto { margin: 0; padding: 7px 0; white-space: nowrap; font-size: 8px; letter-spacing: .7px; }
+.playing .movement-toggles { pointer-events: auto; }
+#touchpad-move.active { color: var(--ivory); }
+@media (min-width: 1001px) { #hud .hud-right { width: 280px; } }
+@media (max-width: 700px) and (pointer: fine) {
+  #hud .hud-right { display: block; position: absolute; right: 16px; bottom: 315px; width: auto; max-width: calc(100vw - 32px); padding: 4px 10px; background: #0c1417df; border: 1px solid var(--line); }
+  #hud .hud-right small { display: none; }
+}
+@media (any-pointer: coarse) and (pointer: fine) {
+  #hud .hud-right { display: block; position: fixed; right: var(--touch-edge); bottom: calc(var(--touch-bottom) + 2 * var(--touch-size) + 132px); width: 230px; padding: 4px 10px; background: #0c1417df; border: 1px solid var(--line); }
+  #hud .hud-right small { display: none; }
+}

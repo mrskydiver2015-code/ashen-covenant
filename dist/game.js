@@ -288,6 +288,7 @@ let savedGold = stats.gold;
 let enemies = [], spawns = [], shots = [], effects = [], particles = [], orbiters = [], choices = [];
 let pending = 0, spawnClock = 0, config, bossPending = false, attackCd = 0, novaCd = 0, dashCd = 0, dashTime = 0, invulnerable = 0, shake = 0, attackAnim = 0, attackCount = 0;
 let autoAttack = true, mouseHeld = false, pointerSeen = false, aim = 0, hitStop = 0;
+let touchpadMove = false, pointerGesture = null;
 const keys = new Set(), pointer = new THREE.Vector2(), raycaster = new THREE.Raycaster(), aimPoint = new THREE.Vector3(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const move = new THREE.Vector3(), dashDirection = new THREE.Vector3(0, 0, -1), joystick = { x: 0, y: 0, id: null };
 const giftCounts = new Map();
@@ -304,6 +305,7 @@ function enableAudio() {
 }
 $('sound').onclick = () => { soundOn = !soundOn; enableAudio(); tone(320, 0.2, 'sine', 0.04, 420); };
 function setPanel(name) {
+  releaseMovementPointer();
   for (const p of document.querySelectorAll('.panel')) p.hidden = p.id !== name;
   $('overlay').hidden = !name; $('overlay').classList.toggle('modal', name !== 'intro');
   if (name) requestAnimationFrame(() => $(name)?.querySelector('button')?.focus());
@@ -525,6 +527,9 @@ function selectBlessing(index) {
 function die() {
   state = 'dead'; keys.clear(); mouseHeld = false;
   resetClassCombat(classProgress); classAura.visible = false;
+  classProgress = createClassState(classProgress.id);
+  for (const drop of drops) scene.remove(drop.object);
+  drops = [];
   burst(player.position, 35, '#c1cecc'); player.visible = false;
   let best = wave; try { best = Math.max(wave, Number(localStorage.getItem('ashen-covenant-best')) || 0); localStorage.setItem('ashen-covenant-best', String(best)); } catch { /* Storage is optional. */ }
   $('death-stats').textContent = `You reached wave ${wave}, slew ${kills} demons, and claimed ${souls} souls in ${Math.floor(elapsed / 60)}m ${Math.floor(elapsed % 60)}s.`;
@@ -599,13 +604,26 @@ function updateEnemies(dt) {
 function updatePlaying(dt) {
   elapsed += dt; attackCd -= dt; novaCd = Math.max(0, novaCd - dt); dashCd = Math.max(0, dashCd - dt); invulnerable = Math.max(0, invulnerable - dt); attackAnim = Math.max(0, attackAnim - dt);
   move.set((keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) + joystick.x, 0, (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) + joystick.y);
+  // Keyboard/joystick input takes priority while used; the held pointer resumes afterward.
+  if (touchpadMove && mouseHeld && pointerSeen && move.lengthSq() < 0.0001) {
+    raycaster.setFromCamera(pointer, camera);
+    if (raycaster.ray.intersectPlane(groundPlane, aimPoint)) {
+      const dx = aimPoint.x - player.position.x, dz = aimPoint.z - player.position.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > 0.15) {
+        // Ease into the target like an analog stick, with a dead zone and no overshoot.
+        const strength = Math.min(1, distance / 1.5, (distance - 0.12) / (stats.speed * Math.max(dt, 0.001)));
+        move.set(dx / distance * strength, 0, dz / distance * strength);
+      }
+    }
+  }
   if (move.length() > 1) move.normalize();
   if (dashTime > 0) { dashTime -= dt; player.position.addScaledVector(dashDirection, dt * 27); if (Math.random() < 0.5) burst(player.position, 2, '#9cd8ec', 0.5); }
   else player.position.addScaledVector(move, dt * stats.speed);
   resolveScenery(player.position);
   let nearest = null, nearestDistance = Infinity;
   for (const e of enemies) { if (e.dead) continue; const d = e.mesh.position.distanceTo(player.position); if (d < nearestDistance) { nearestDistance = d; nearest = e; } }
-  if (mouseHeld && pointerSeen) { raycaster.setFromCamera(pointer, camera); if (raycaster.ray.intersectPlane(groundPlane, aimPoint)) aim = Math.atan2(aimPoint.x - player.position.x, -(aimPoint.z - player.position.z)); }
+  if (mouseHeld && pointerSeen && !touchpadMove) { raycaster.setFromCamera(pointer, camera); if (raycaster.ray.intersectPlane(groundPlane, aimPoint)) aim = Math.atan2(aimPoint.x - player.position.x, -(aimPoint.z - player.position.z)); }
   else if (autoAttack && nearest && nearestDistance < weaponStats(stats, equippedWeapon).range + 2) aim = Math.atan2(nearest.mesh.position.x - player.position.x, -(nearest.mesh.position.z - player.position.z));
   else if (move.lengthSq() > 0.01) aim = Math.atan2(move.x, -move.z);
   player.rotation.y = -aim;
@@ -614,7 +632,7 @@ function updatePlaying(dt) {
   player.userData.cape.rotation.x = -0.18 + Math.sin(timer * 9) * 0.06 + move.length() * -0.25;
   player.userData.sword.rotation.y = attackAnim > 0 ? Math.sin((1 - attackAnim / 0.23) * Math.PI) * 1.8 - 0.7 : 0;
   player.visible = invulnerable > 0 ? Math.sin(timer * 50) > -0.5 : true;
-  if (mouseHeld || (autoAttack && nearest && nearestDistance < weaponStats(stats, equippedWeapon).range + nearest.radius)) rend();
+  if ((mouseHeld && !touchpadMove) || (autoAttack && nearest && nearestDistance < weaponStats(stats, equippedWeapon).range + nearest.radius)) rend();
   if (keys.has('KeyQ')) nova(); if (keys.has('Space')) dash(); if (keys.has('KeyR')) useElixir();
   tickClassCombat(classProgress, dt, classContext());
   spawnClock -= dt;
@@ -701,7 +719,7 @@ function showClassPath() {
 }
 function classContext() {
   return {
-    stats, position: player.position, aim,
+    stats: { ...stats, damage: weaponStats(stats, equippedWeapon).damage }, position: player.position, aim,
     targets: () => enemies.filter(e => !e.dead).map(e => ({ enemy: e, position: e.mesh.position, radius: e.radius })),
     hit: (target, amount, freeze) => {
       damageEnemy(target.enemy, amount, false, freeze > 0);
@@ -763,6 +781,15 @@ $('class-info').onclick = showClassPath;
 $('class-back').onclick = togglePause;
 $('nova').onclick = nova; $('dash').onclick = dash; $('heal').onclick = useElixir; $('attack').onclick = rend;
 $('auto').onclick = () => { autoAttack = !autoAttack; $('auto').classList.toggle('active', autoAttack); $('auto').setAttribute('aria-pressed', String(autoAttack)); };
+$('touchpad-move').onclick = () => {
+  releaseMovementPointer();
+  touchpadMove = !touchpadMove;
+  $('touchpad-move').classList.toggle('active', touchpadMove);
+  $('touchpad-move').setAttribute('aria-pressed', String(touchpadMove));
+  $('touchpad-move-label').textContent = `TOUCHPAD MOVE [${touchpadMove ? 'ON' : 'OFF'}]`;
+  $('movement-hint').textContent = touchpadMove ? 'HOLD / DRAG TO MOVE · WASD ALSO WORKS' : 'WASD TO MOVE · MOUSE TO AIM';
+  $('attack').title = touchpadMove ? 'Click a nearby demon to rend, or use Auto-Rend' : 'Hold left mouse to attack';
+};
 addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) && state === 'playing') e.preventDefault();
   if (e.code === 'KeyE' && !e.repeat) interact();
@@ -773,11 +800,56 @@ addEventListener('keydown', e => {
   if (state === 'playing') keys.add(e.code);
 });
 addEventListener('keyup', e => keys.delete(e.code));
-renderer.domElement.addEventListener('pointermove', e => { pointerSeen = true; pointer.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); });
-renderer.domElement.addEventListener('pointerdown', e => { if (e.button === 0 && e.pointerType !== 'touch' && state === 'playing') { mouseHeld = true; pointerSeen = true; pointer.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); } });
-addEventListener('pointerup', () => { mouseHeld = false; });
+function updateMovementPointer(e) {
+  pointerSeen = true;
+  const bounds = renderer.domElement.getBoundingClientRect();
+  pointer.set((e.clientX - bounds.left) / bounds.width * 2 - 1, -(e.clientY - bounds.top) / bounds.height * 2 + 1);
+}
+function releaseMovementPointer() {
+  const id = pointerGesture?.id;
+  pointerGesture = null; mouseHeld = false;
+  if (id !== undefined && renderer.domElement.hasPointerCapture(id)) renderer.domElement.releasePointerCapture(id);
+}
+function enemyAtPointer() {
+  raycaster.setFromCamera(pointer, camera);
+  const living = enemies.filter(e => !e.dead);
+  const hit = raycaster.intersectObjects(living.map(e => e.mesh), true)[0];
+  if (!hit) return null;
+  let object = hit.object;
+  while (object && object.parent !== scene) object = object.parent;
+  return living.find(e => e.mesh === object) || null;
+}
+renderer.domElement.addEventListener('pointermove', e => {
+  if (pointerGesture && pointerGesture.id !== e.pointerId) return;
+  updateMovementPointer(e);
+  if (pointerGesture) {
+    pointerGesture.dragged ||= Math.hypot(e.clientX - pointerGesture.x, e.clientY - pointerGesture.y) > 8;
+    if ((e.buttons & 1) === 0) releaseMovementPointer();
+  }
+});
+renderer.domElement.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.isPrimary === false || state !== 'playing' || (e.pointerType === 'touch' && !touchpadMove) || pointerGesture) return;
+  e.preventDefault(); updateMovementPointer(e); mouseHeld = true;
+  pointerGesture = { id: e.pointerId, x: e.clientX, y: e.clientY, started: performance.now(), dragged: false };
+  renderer.domElement.setPointerCapture(e.pointerId);
+});
+addEventListener('pointerup', e => {
+  if (pointerGesture?.id !== e.pointerId || e.button !== 0) return;
+  const gesture = pointerGesture;
+  updateMovementPointer(e); releaseMovementPointer();
+  const tapped = !gesture.dragged && Math.hypot(e.clientX - gesture.x, e.clientY - gesture.y) <= 8 && performance.now() - gesture.started < 300;
+  if (!touchpadMove || !tapped || state !== 'playing') return;
+  const target = enemyAtPointer();
+  if (target && target.mesh.position.distanceTo(player.position) < weaponStats(stats, equippedWeapon).range + target.radius) {
+    aim = Math.atan2(target.mesh.position.x - player.position.x, -(target.mesh.position.z - player.position.z));
+    player.rotation.y = -aim; rend();
+  }
+});
+for (const event of ['pointercancel', 'lostpointercapture']) renderer.domElement.addEventListener(event, e => {
+  if (pointerGesture?.id === e.pointerId) releaseMovementPointer();
+});
 renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
-function resetInput() { keys.clear(); mouseHeld = false; joystick.x = joystick.y = 0; joystick.id = null; $('joystick').firstElementChild.style.transform = ''; if (state === 'playing') togglePause(); }
+function resetInput() { keys.clear(); releaseMovementPointer(); joystick.x = joystick.y = 0; joystick.id = null; $('joystick').firstElementChild.style.transform = ''; if (state === 'playing') togglePause(); }
 addEventListener('blur', resetInput); document.addEventListener('visibilitychange', () => { if (document.hidden) resetInput(); });
 const stick = $('joystick');
 function moveStick(e) { const r = stick.getBoundingClientRect(); let x = (e.clientX - r.left - r.width / 2) / 28, y = (e.clientY - r.top - r.height / 2) / 28; const l = Math.max(1, Math.hypot(x, y)); x /= l; y /= l; joystick.x = x; joystick.y = y; stick.firstElementChild.style.transform = `translate(${x * 24}px,${y * 24}px)`; }
