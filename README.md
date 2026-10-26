@@ -60,8 +60,12 @@ Browser verification should cover loading, movement, attacks, damage, upgrades, 
 
 ## Enemy loot and wallet
 
-Every demon drops gold; walk within two units to collect it. The first kill and every boss guarantee a weapon; other kills have a 16% weapon chance. Press E or tap the interaction button near a weapon to swap, leaving the old weapon on the ground. Compare damage, seconds per attack, and reach in the prompt with your equipped weapon. Daggers attack quickly, axes hit hard, and spears have extra reach. Weapon quality increases with waves (Forged, Rare, Relic). Equipment resets each run; blessings remain independent of equipment. Ground drops remain between waves and reset on death/restart; up to 80 drops are retained, merging gold and retiring older weapons when full.
+Every demon drops gold; walk within two units to collect it. The first kill and bosses other than Wave 05 guarantee a weapon; other kills have a 16% weapon chance. Press E or tap the interaction button near a weapon to swap, leaving the old weapon on the ground. Compare damage, seconds per attack, and reach in the prompt with your equipped weapon. Daggers attack quickly, axes hit hard, and spears have extra reach. Weapon quality increases with waves (Forged, Rare, Relic). Equipment resets each run; blessings remain independent of equipment. Ground drops remain between waves and reset on death/restart; up to 80 drops are retained, merging gold and retiring older weapons when full.
 
-Collected gold and chest gold share a wallet saved immediately in browser localStorage (`ashen-covenant-gold-v1`); shrine purchases use this same balance. Gold survives death and reload on the same browser origin, ready for future shops. Browser storage unavailable: play continues with a session wallet. Changing localhost port changes the browser storage origin.
+Collected gold and chest gold share a wallet saved immediately in browser localStorage (`ashen_gold`); shrine purchases use this same balance. Gold survives death and reload on the same browser origin, ready for future shops. Browser storage unavailable: play continues with a session wallet. Changing localhost port changes the browser storage origin.
 
 `dist/loot.js` defines weapon modifiers, drop rolls, and wallet validation. Run `npm test` for loot, wallet, classes, exploration and progression tests; `npm run check` validates syntax.
+
+## Wave 05 boss trophy
+
+The Wave 05 Warden drops one Gilded Boss Chest at its death location, replacing normal boss loot. Press E or tap nearby to open it for exactly 100 gold and the guaranteed rare Gilded Resolve blessing (+20 maximum health, 20 healing, +15% Rend damage). The chest remains across wave transitions until claimed; death/new run clears it. Gold persists in `ashen_gold`; the previous wallet key migrates only when this key is absent.

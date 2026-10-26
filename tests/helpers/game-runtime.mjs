@@ -6,6 +6,8 @@ import * as THREE from '../../dist/vendor/three.module.js';
 import * as rules from '../../dist/rules.js';
 import * as classes from '../../dist/classes.js';
 import * as loot from '../../dist/loot.js';
+import { createBossMesh } from '../../dist/boss-model.js';
+import { loadBossArena, clearBossArena } from '../../dist/arena-wave5.js';
 
 const source = readFileSync(new URL('../../dist/game.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../../dist/index.html', import.meta.url), 'utf8');
@@ -48,7 +50,11 @@ export function gameRuntime({ data = new Map(), denied = false, coarse = false, 
   class Renderer { constructor() { this.domElement = new Element(); this.shadowMap = {}; this.capabilities = { getMaxAnisotropy: () => 1 }; } setPixelRatio() {} setSize(width, height) { this.domElement.bounds = { left: 0, top: 0, width, height }; } render() {} }
   const math = Object.create(Math); math.random = () => 0.5;
   let frameDelta = 0.04, wallTime = 0;
+  const audioCalls = [];
   const context = vm.createContext({ THREE: { ...THREE, WebGLRenderer: Renderer, Clock: class { getDelta() { return frameDelta; } } }, ...rules, ...classes, ...loot,
+    createBossMesh, loadBossArena, clearBossArena,
+    tone() {}, playSlash() { audioCalls.push('slash'); }, playHit() { audioCalls.push('hit'); },
+    playChestOpen() { audioCalls.push('chest'); }, playBossSpawn() { audioCalls.push('boss'); },
     document, window: { localStorage: storage }, localStorage: storage, Math: math, console,
     matchMedia: query => ({ matches: query.includes('coarse') && coarse }), devicePixelRatio: 1, innerWidth: 1280, innerHeight: 900,
     requestAnimationFrame() {}, setTimeout() { return 1; }, clearTimeout() {}, performance: { now: () => wallTime },
@@ -56,7 +62,7 @@ export function gameRuntime({ data = new Map(), denied = false, coarse = false, 
   });
   vm.runInContext(sourceText.replace(/^import .*;\r?\n/gm, ''), context, { filename: 'dist/game.js', timeout: 5000 });
   const run = code => vm.runInContext(code, context, { timeout: 5000 });
-  return { run, data, ids, key(code, repeat = false) { listeners.get('keydown')({ code, repeat, preventDefault() {} }); listeners.get('keyup')({ code }); },
+  return { run, data, ids, audioCalls, key(code, repeat = false) { listeners.get('keydown')({ code, repeat, preventDefault() {} }); listeners.get('keyup')({ code }); },
     event(name, detail) { listeners.get(name)(detail); }, frame(dt = 0.04) { frameDelta = dt; run('animate()'); },
     advanceTime(ms) { wallTime += ms; },
     pointer(name, detail = {}) {

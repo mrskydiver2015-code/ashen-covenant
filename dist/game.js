@@ -1,5 +1,8 @@
+import { tone, playSlash, playHit, playChestOpen, playBossSpawn } from './audio.js';
+import { createBossMesh } from './boss-model.js';
+import { loadBossArena, clearBossArena } from './arena-wave5.js';
 import * as THREE from './vendor/three.module.js';
-import { makeWeapon, weaponInfo, weaponStats, rollLoot, loadWallet, saveWallet, normalizeGold } from './loot.js';
+import { makeWeapon, weaponInfo, weaponStats, rollLoot, loadWallet, saveWallet, normalizeGold, dropBossLoot, openBossChest } from './loot.js';
 import { CLASSES, CLASS_KEYS, getClass, createClassState, unlockClassWave, abilityStatus, absorbClassDamage, resetClassCombat, castClassAbility, tickClassCombat } from './classes.js';
 import { createStats, waveConfig, enemyKind, chooseBlessings, heal, constrainPosition, MAX_ACTIVE_ENEMIES, ARENA_RADIUS, REGIONS, createChests, openChest, buyHealing } from './rules.js';
 
@@ -190,13 +193,14 @@ function interactionTarget() {
 }
 function interact() {
   if (state !== 'playing') return;
+  if (nearbyBossChest()) { claimBossChest(nearbyBossChest()); return; }
   if (nearbyWeapon()) { equipDrop(nearbyWeapon()); return; }
   const chest = interactionTarget();
   if (chest) {
     const loot = openChest(chest, stats);
     chest.beacon.visible = false;
     announce('+' + loot.gold + ' GOLD · ' + loot.name.toUpperCase());
-    burst(chest.object.position, 20, '#eac277'); tone(440, 0.3, 'sine', 0.05, 880);
+    burst(chest.object.position, 20, '#eac277'); playChestOpen();
   } else if (player.position.distanceTo(shrinePosition) < 3) {
     if (buyHealing(stats)) { flashRing(player.position, 3, '#96dfbd'); announce('RESTORED 50 HEALTH'); }
     else announce(stats.hp >= stats.maxHp ? 'HEALTH IS FULL' : 'NEED 30 GOLD');
@@ -211,13 +215,15 @@ function updateExplorationHud() {
   $('chest-count').textContent = chests.filter(c => c.opened).length + '/12 CHESTS';
   const chest = interactionTarget(), shrine = player.position.distanceTo(shrinePosition) < 3;
   const weaponDrop = nearbyWeapon();
-  $('interact').hidden = state !== 'playing' || (!chest && !shrine && !weaponDrop);
+  const bossChest = nearbyBossChest();
+  $('interact').hidden = state !== 'playing' || (!chest && !shrine && !weaponDrop && !bossChest);
   $('interact').textContent = chest ? 'E · OPEN ' + (chest.rare ? 'RARE ' : '') + 'CHEST' : 'E · HEAL 50 HP · 30 GOLD';
   if (weaponDrop) {
     const info = weaponInfo(weaponDrop.weapon), next = weaponStats(stats, weaponDrop.weapon);
     $('interact').textContent = `E · SWAP: ${info.name} · ${Math.round(next.damage)} DMG / ${next.attackDelay.toFixed(2)}s / ${next.range.toFixed(1)} REACH`;
   }
   const current = weaponStats(stats, equippedWeapon);
+  if (bossChest) $('interact').textContent = 'E · OPEN GILDED BOSS CHEST · 100 GOLD + RARE BLESSING';
   $('weapon-name').textContent = weaponInfo(equippedWeapon).name;
   $('weapon-details').textContent = `${Math.round(current.damage)} DMG · ${current.attackDelay.toFixed(2)}s · ${current.range.toFixed(1)} REACH`;
   $('wallet-status').textContent = walletSaved ? 'WALLET · KEPT ON DEATH' : 'WALLET · SESSION ONLY';
@@ -294,16 +300,6 @@ const move = new THREE.Vector3(), dashDirection = new THREE.Vector3(0, 0, -1), j
 const giftCounts = new Map();
 let selectedClass = 'reaver', classProgress = createClassState(), classPathOpen = false;
 const classAura = ring(scene, 1, '#ef8d78', 0.6, 0.15); classAura.visible = false;
-let audio, soundOn = false;
-function tone(frequency = 100, duration = 0.12, type = 'sine', volume = 0.06, end = 30) {
-  if (!soundOn || !audio) return;
-  const o = audio.createOscillator(), gain = audio.createGain(); o.type = type; o.frequency.setValueAtTime(frequency, audio.currentTime); o.frequency.exponentialRampToValueAtTime(Math.max(15, end), audio.currentTime + duration); gain.gain.setValueAtTime(volume, audio.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + duration); o.connect(gain); gain.connect(audio.destination); o.start(); o.stop(audio.currentTime + duration); o.onended = () => { o.disconnect(); gain.disconnect(); };
-}
-function enableAudio() {
-  try { audio ??= new (window.AudioContext || window.webkitAudioContext)(); audio.resume().catch(() => {}); } catch { soundOn = false; }
-  $('sound').innerHTML = `♪<span>SOUND ${soundOn ? 'ON' : 'OFF'}</span>`; $('sound').setAttribute('aria-label', soundOn ? 'Mute sound' : 'Enable sound');
-}
-$('sound').onclick = () => { soundOn = !soundOn; enableAudio(); tone(320, 0.2, 'sine', 0.04, 420); };
 function setPanel(name) {
   releaseMovementPointer();
   for (const p of document.querySelectorAll('.panel')) p.hidden = p.id !== name;
@@ -346,6 +342,20 @@ function persistGold() {
   stats.gold = normalizeGold(stats.gold);
   walletSaved = saveWallet(walletStorage, stats.gold); savedGold = stats.gold;
 }
+function nearbyBossChest() {
+  return drops.find(d => d.type === 'boss-chest' && !d.opened && Math.hypot(d.object.position.x - player.position.x, d.object.position.z - player.position.z) < 2.5);
+}
+function claimBossChest(chest) {
+  if (state !== 'playing' || chest !== nearbyBossChest()) return;
+  const reward = openBossChest(chest, stats);
+  if (!reward) return;
+  persistGold(); scene.remove(chest.object); drops.splice(drops.indexOf(chest), 1);
+  giftCounts.set(reward.blessing.id, { blessing: reward.blessing, count: 1 });
+  const gift = document.createElement('div'); gift.className = 'gift';
+  gift.textContent = '✦ RARE · ' + reward.blessing.name; gift.title = reward.blessing.description;
+  $('gifts').appendChild(gift);
+  announce('BOSS TROPHY · +100 GOLD · RARE GILDED RESOLVE'); updateHud();
+}
 function weaponModel(parent, weapon) {
   const material = weapon.id === 'axe' ? materials.gold : weapon.id === 'dagger' ? materials.bone : materials.blade;
   const length = weapon.id === 'spear' ? 2.5 : weapon.id === 'dagger' ? 0.8 : 1.6;
@@ -369,12 +379,21 @@ function spawnDrop(loot, position) {
   if (drops.length >= 80) {
     const old = drops.find(d => d.type === 'weapon');
     if (old) { scene.remove(old.object); drops.splice(drops.indexOf(old), 1); }
-    else if (loot.type === 'gold') { drops[0].amount += loot.amount; return; }
-    else { drops[1].amount += drops[0].amount; scene.remove(drops[0].object); drops.shift(); }
+    else {
+      const goldDrops = drops.filter(d => d.type === 'gold');
+      if (loot.type === 'gold') { goldDrops[0].amount += loot.amount; return; }
+      goldDrops[1].amount += goldDrops[0].amount;
+      scene.remove(goldDrops[0].object); drops.splice(drops.indexOf(goldDrops[0]), 1);
+    }
   }
   const object = new THREE.Group(); object.position.copy(position);
-  object.position.x += loot.type === 'weapon' ? 0.7 : -0.4; constrainPosition(object.position);
+  object.position.x += loot.type === 'weapon' ? 0.7 : loot.type === 'gold' ? -0.4 : 0; constrainPosition(object.position);
   if (loot.type === 'gold') mesh(object, geo.cylinder, materials.gold, 0, 0, 0, 0.3, 0.12, 0.3);
+  else if (loot.type === 'boss-chest') {
+    mesh(object, geo.box, materials.gold, 0, 0.35, 0, 1.5, 0.7, 1);
+    mesh(object, geo.box, materials.blade, 0, 0.76, 0, 1.6, 0.15, 1.1);
+    mesh(object, geo.oct, materials.blue, 0, 1.4, 0, 0.3, 0.55, 0.3);
+  }
   else {
     weaponModel(object, loot.weapon);
     mesh(object, geo.oct, materials.blue, 0, 0.25, 0, 0.13, 0.4, 0.13);
@@ -394,7 +413,7 @@ function updateDrops(dt) {
   let collected = 0;
   for (let i = drops.length - 1; i >= 0; i--) {
     const drop = drops[i], p = drop.object.position;
-    p.y = 0.5 + Math.sin(timer * 3 + drop.phase) * 0.12; drop.object.rotation.y += dt * 0.8;
+    if (drop.type !== 'boss-chest') { p.y = 0.5 + Math.sin(timer * 3 + drop.phase) * 0.12; drop.object.rotation.y += dt * 0.8; }
     if (drop.type === 'gold' && Math.hypot(p.x - player.position.x, p.z - player.position.z) < 2) {
       collected += drop.amount; scene.remove(drop.object); drops.splice(i, 1);
     }
@@ -405,8 +424,9 @@ function updateDrops(dt) {
   }
 }
 function startRun() {
+  clearBossArena(scene);
   for (const d of previewDemons) scene.remove(d);
-  for (const e of enemies) scene.remove(e.mesh);
+  for (const e of enemies) { e.bossModel?.dispose(); scene.remove(e.mesh); }
   for (const list of [spawns, shots, effects, particles]) for (const e of list) disposeObject(e.object);
   for (const o of orbiters) scene.remove(o);
   enemies = []; spawns = []; shots = []; effects = []; particles = []; orbiters = [];
@@ -420,10 +440,12 @@ function startRun() {
   attackCd = novaCd = dashCd = dashTime = invulnerable = hitStop = shake = 0; keys.clear(); mouseHeld = false;
   player.position.set(0, 0, 2); player.rotation.set(0, 0, 0); player.visible = true; aim = 0;
   $('gifts').innerHTML = '<span class="muted">Power comes at a price.</span>'; $('boss-hud').hidden = true; $('floaters').replaceChildren();
-  document.body.classList.add('playing'); state = 'playing'; setPanel(null); enableAudio(); nextWave(); updateHud();
+  document.body.classList.add('playing'); state = 'playing'; setPanel(null); nextWave(); updateHud();
 }
 function nextWave() {
+  clearBossArena(scene);
   wave++; config = waveConfig(wave); pending = config.count; bossPending = config.boss; spawnClock = 1.2; state = 'playing'; setPanel(null);
+  if (wave === 5) { loadBossArena(scene); playBossSpawn(); }
   $('wave-title').textContent = `WAVE ${String(wave).padStart(2, '0')}`;
   $('chapter').textContent = wave < 5 ? 'THE FORSAKEN SANCTUM' : wave < 10 ? 'THE BLOOD COVENANT' : 'THE ABYSS REMEMBERS';
   announce(config.boss ? 'THE WARDEN AWAKENS' : `WAVE ${String(wave).padStart(2, '0')} · ${wave === 1 ? 'FIRST BLOOD' : 'THE DESCENT CONTINUES'}`);
@@ -436,24 +458,34 @@ function prepareSpawn(kind) {
   spawns.push({ object: r, position: p, kind, life: 1.0 });
 }
 function spawnEnemy(kind, position) {
-  const m = makeActor(kind); m.position.copy(position); scene.add(m);
+  const bossModel = kind === 'boss' ? createBossMesh() : null;
+  const m = bossModel ? bossModel.root : makeActor(kind); m.position.copy(position); scene.add(m);
   const table = { imp: [28, 3.4, 7, 0.5], stalker: [52, 2.45, 12, 0.75], caster: [38, 1.7, 11, 0.65], brute: [145, 1.55, 24, 1.05], boss: [700, 1.3, 30, 1.7] };
   const [hp, speed, damage, radius] = table[kind];
-  enemies.push({ mesh: m, kind, hp: hp * config.health, maxHp: hp * config.health, speed, damage: damage * config.damage, radius, cooldown: range(0.5, 1.3), slow: 0, stun: 0, windup: 0, attackTarget: new THREE.Vector3(), special: 4, dead: false });
-  burst(position, 9, '#dc6543', 0.7); if (kind === 'boss') $('boss-hud').hidden = false;
+  enemies.push({ mesh: m, bossModel, kind, hp: hp * config.health, maxHp: hp * config.health, speed, damage: damage * config.damage, radius, cooldown: range(0.5, 1.3), slow: 0, stun: 0, windup: 0, attackTarget: new THREE.Vector3(), special: 4, dead: false });
+  burst(position, 9, '#dc6543', 0.7);
+  if (kind === 'boss') {
+    $('boss-hud').hidden = false; $('boss-fill').style.width = '100%';
+    // Wave 05 announces the encounter at entry; do not replay that cue after its portal.
+    if (wave !== 5) playBossSpawn();
+  }
 }
 function damageEnemy(enemy, amount, critical = false, frost = false) {
   if (enemy.dead) return;
   enemy.hp -= amount; enemy.stun = 0.13; if (frost) enemy.slow = 2;
+  if (amount > 0) playHit();
   floating(Math.round(amount), enemy.mesh.position, frost ? '#a8e8ff' : '#e8dfca', critical);
   burst(enemy.mesh.position, critical ? 8 : 4, frost ? '#8dddf2' : '#d68c52', 0.65);
   if (enemy.hp <= 0) {
     enemy.dead = true; kills++; souls += enemy.kind === 'boss' ? 100 : enemy.kind === 'brute' ? 15 : 5;
     if (stats.leech) heal(stats, stats.leech);
-    for (const loot of rollLoot(enemy.kind, wave, Math.random, kills === 1)) spawnDrop(loot, enemy.mesh.position);
+    if (enemy.kind === 'boss' && wave === 5) {
+      const bossPos = enemy.mesh.position.clone();
+      const chest = dropBossLoot(bossPos); spawnDrop(chest, chest.position); playChestOpen();
+    } else for (const loot of rollLoot(enemy.kind, wave, Math.random, kills === 1)) spawnDrop(loot, enemy.mesh.position);
     burst(enemy.mesh.position, enemy.kind === 'boss' ? 36 : 13, '#cb6b42'); flashRing(enemy.mesh.position, enemy.radius * 1.4, '#9d473b', 0.35);
     if (enemy.kind === 'boss') { $('boss-hud').hidden = true; announce('THE WARDEN FALLS'); shake = 0.5; }
-    scene.remove(enemy.mesh); tone(85, 0.12, 'triangle', 0.025, 25);
+    enemy.bossModel?.dispose(); scene.remove(enemy.mesh); tone(85, 0.12, 'triangle', 0.025, 25);
   }
 }
 function receiveDamage(amount) {
@@ -461,7 +493,7 @@ function receiveDamage(amount) {
   amount = absorbClassDamage(classProgress, amount);
   if (amount <= 0) { invulnerable = 0.65; flashRing(player.position, 1.5, '#e4ce8d', 0.25); return; }
   stats.hp = Math.max(0, stats.hp - amount); invulnerable = 0.65; shake = 0.3;
-  floating(`−${Math.round(amount)}`, player.position, '#f48b75'); tone(65, 0.24, 'sawtooth', 0.05, 22);
+  floating(`−${Math.round(amount)}`, player.position, '#f48b75'); playHit();
   $('damage-flash').style.opacity = 0.55; setTimeout(() => { $('damage-flash').style.opacity = 0; }, 150);
   if (stats.hp <= 0) die();
 }
@@ -469,6 +501,7 @@ function rend() {
   if (state !== 'playing' || attackCd > 0 || dashTime > 0) return;
   const combat = weaponStats(stats, equippedWeapon);
   attackCd = combat.attackDelay; attackAnim = 0.23; attackCount++;
+  playSlash();
   const geometry = new THREE.RingGeometry(combat.range * 0.68, combat.range, 28, 1, -1.05, 2.1);
   const arc = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: stats.frost ? '#9ceaff' : '#ead5a8', side: THREE.DoubleSide, transparent: true, opacity: 0.65, blending: THREE.AdditiveBlending, depthWrite: false }));
   arc.rotation.set(-Math.PI / 2, 0, Math.PI / 2 - aim); arc.position.copy(player.position); arc.position.y = 0.6; arc.userData.ownedGeometry = true;
@@ -484,7 +517,6 @@ function rend() {
     let origin = player.position; const candidates = enemies.filter(e => !e.dead && e.mesh.position.distanceTo(player.position) < 10).sort((a, b) => a.mesh.position.distanceTo(player.position) - b.mesh.position.distanceTo(player.position)).slice(0, 3);
     for (const e of candidates) { lightning(origin, e.mesh.position); damageEnemy(e, combat.damage * 0.65 * stats.lightning); origin = e.mesh.position; }
   }
-  tone(hit ? 130 : 200, 0.08, hit ? 'triangle' : 'sine', hit ? 0.045 : 0.015, 40);
   if (hit) { hitStop = 0.025; shake = Math.max(shake, 0.07); }
 }
 function nova() {
@@ -520,12 +552,15 @@ function clearWave() {
 function selectBlessing(index) {
   if (state !== 'upgrade' || !choices[index]) return;
   const b = choices[index]; b.apply(stats); giftCounts.set(b.id, { blessing: b, count: (giftCounts.get(b.id)?.count || 0) + 1 });
-  $('gifts').innerHTML = [...giftCounts.values()].map(({ blessing: gift, count }) => `<div class="gift"><b>${gift.icon}</b> ${gift.name}${count > 1 ? ` ×${count}` : ''}</div>`).join('');
+  $('gifts').innerHTML = [...giftCounts.values()].map(({ blessing: gift, count }) => `<div class="gift"><b>${gift.icon}</b> ${gift.tier === 'rare' ? 'RARE ? ' : ''}${gift.name}${count > 1 ? ` ×${count}` : ''}</div>`).join('');
   while (orbiters.length < stats.orbit) { const o = mesh(scene, geo.oct, materials.blue, 0, 0.9, 0, 0.12, 0.13, 0.65); orbiters.push(o); }
   tone(440, 0.3, 'sine', 0.05, 880); nextWave();
 }
 function die() {
   state = 'dead'; keys.clear(); mouseHeld = false;
+  clearBossArena(scene);
+  for (const enemy of enemies) enemy.bossModel?.dispose();
+  $('boss-hud').hidden = true;
   resetClassCombat(classProgress); classAura.visible = false;
   classProgress = createClassState(classProgress.id);
   for (const drop of drops) scene.remove(drop.object);
@@ -584,6 +619,7 @@ function updateEnemies(dt) {
         else { receiveDamage(e.damage); e.mesh.position.addScaledVector(dir, -0.3); }
       }
     }
+    if (state !== 'playing') return;
     if (e.kind === 'boss') {
       $('boss-fill').style.width = `${Math.max(0, e.hp / e.maxHp) * 100}%`;
       if (e.special <= 0) { e.special = 5; flashRing(p, 3, '#ff6b44'); for (let i = 0; i < 12; i++) shoot(e, new THREE.Vector3(Math.sin(i * TAU / 12), 0, Math.cos(i * TAU / 12)), 4); }
@@ -595,8 +631,13 @@ function updateEnemies(dt) {
       if (d > 0.01 && d < minimum) { p.x += ox / d * dt; p.z += oz / d * dt; }
     }
     resolveScenery(p, e.radius * 0.6);
-    e.mesh.userData.leftLeg.rotation.x = moving ? Math.sin(timer * 10 + p.x) * 0.45 : 0;
-    e.mesh.userData.rightLeg.rotation.x = -e.mesh.userData.leftLeg.rotation.x;
+    if (e.bossModel) {
+      e.bossModel.idle(timer);
+      e.bossModel.swing(e.windup > 0 ? 1 - e.windup / 0.8 : 0);
+    } else {
+      e.mesh.userData.leftLeg.rotation.x = moving ? Math.sin(timer * 10 + p.x) * 0.45 : 0;
+      e.mesh.userData.rightLeg.rotation.x = -e.mesh.userData.leftLeg.rotation.x;
+    }
     e.mesh.position.y = e.stun > 0 ? Math.sin(e.stun * 35) * 0.06 : 0;
   }
   enemies = enemies.filter(e => !e.dead);

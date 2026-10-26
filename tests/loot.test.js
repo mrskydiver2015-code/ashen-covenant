@@ -20,11 +20,52 @@ function runtime() {
     materials: { gold: material, bone: material, blade: material, blue: material },
     geo: { box: new THREE.BoxGeometry(), oct: new THREE.OctahedronGeometry(), cylinder: new THREE.CylinderGeometry() },
     mesh(parent, geometry, material) { const m = new THREE.Mesh(geometry, material); parent.add(m); return m; },
-    floating() {}, tone() {}, announce() {}, updateHud() {},
+    floating() {}, tone() {}, playHit() {}, playChestOpen() {}, announce() {}, updateHud() {}, burst() {}, flashRing() {},
+    wave: 5, kills: 0, souls: 0, shake: 0, giftCounts: new Map(),
+    document: { createElement: () => ({}) }, $: () => ({ appendChild() {} }),
   });
   vm.runInContext(source.slice(source.indexOf('function persistGold()'), source.indexOf('function startRun()')), context);
+  vm.runInContext(source.slice(source.indexOf('function damageEnemy('), source.indexOf('function receiveDamage(')), context);
   return context;
 }
+
+test('Wave 05 boss drops exactly one chest and claim grants 100 saved gold plus rare blessing once', () => {
+  const game = runtime();
+  const boss = { kind: 'boss', mesh: new THREE.Group(), hp: 1, radius: 1.7, dead: false };
+  game.damageEnemy(boss, 2); game.damageEnemy(boss, 2);
+  assert.equal(game.drops.length, 1); assert.equal(game.kills, 1);
+  const chest = game.drops[0];
+  assert.equal(chest.type, 'boss-chest'); assert.equal(chest.blessing.tier, 'rare');
+  game.state = 'upgrade'; game.claimBossChest(chest); assert.equal(game.stats.gold, 0);
+  game.state = 'playing'; game.player.position.x = 10;
+  game.claimBossChest(chest); assert.equal(game.stats.gold, 0);
+  game.player.position.x = 0; game.stats.hp = 50;
+  game.claimBossChest(chest); game.claimBossChest(chest);
+  assert.equal(game.stats.gold, 100); assert.equal(game.stats.maxHp, 120); assert.equal(game.stats.hp, 70);
+  assert.equal(game.stats.damage, 26 * 1.15); assert.equal(game.drops.length, 0);
+  assert.equal(game.walletStorage.getItem('ashen_gold'), '100');
+  assert.equal(game.giftCounts.get('gilded-resolve').blessing.tier, 'rare');
+});
+test('boss descriptor copies position and boss chest survives drop-cap cleanup', () => {
+  const game = runtime(), position = new THREE.Vector3(3, 0, 4);
+  const chest = lootRules.dropBossLoot(position); position.x = 9;
+  assert.equal(chest.position.x, 3);
+  assert.throws(() => lootRules.dropBossLoot({ x: NaN, y: 0, z: 0 }), TypeError);
+  game.spawnDrop(chest, chest.position);
+  for (let i = 0; i < 180; i++) game.spawnDrop({ type: 'gold', amount: 1 }, new THREE.Vector3());
+  game.spawnDrop({ type: 'weapon', weapon: makeWeapon('axe') }, new THREE.Vector3());
+  assert.equal(game.drops.filter(d => d.type === 'boss-chest').length, 1);
+  assert.equal(game.drops.length, 80);
+  assert.equal(game.drops.reduce((n, d) => n + (d.amount || 0), 0), 180);
+});
+test('wallet migration preserves legacy balance and respects canonical zero without double credit', () => {
+  const data = new Map([[lootRules.LEGACY_WALLET_KEY, '250']]);
+  const storage = { getItem: k => data.get(k), setItem: (k,v) => data.set(k,v) };
+  assert.equal(loadWallet(storage), 250); assert.equal(data.get('ashen_gold'), '250');
+  assert.equal(loadWallet(storage), 250);
+  saveWallet(storage, 0); assert.equal(loadWallet(storage), 0);
+  assert.equal(data.get(lootRules.LEGACY_WALLET_KEY), '250');
+});
 
 test('game pickup credits a nearby gold drop exactly once and saves immediately', () => {
   const game = runtime();

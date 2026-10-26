@@ -1,4 +1,24 @@
-export const WALLET_KEY = 'ashen-covenant-gold-v1';
+export const WALLET_KEY = 'ashen_gold';
+export const LEGACY_WALLET_KEY = 'ashen-covenant-gold-v1';
+export const BOSS_BLESSING = Object.freeze({
+  id: 'gilded-resolve', name: 'Gilded Resolve', tier: 'rare', icon: '✦',
+  description: '+20 maximum health, restore 20 health, and deal 15% more Rend damage.',
+});
+// Pure spawn descriptor; the game owns rendering, proximity and lifetime.
+export function dropBossLoot(position) {
+  if (!position || !['x', 'y', 'z'].every(axis => Number.isFinite(position[axis]))) {
+    throw new TypeError('dropBossLoot requires a finite { x, y, z } position');
+  }
+  return { type: 'boss-chest', name: 'Gilded Boss Chest', position: { x: position.x, y: position.y, z: position.z },
+    gold: 100, blessing: BOSS_BLESSING, opened: false };
+}
+export function openBossChest(chest, stats) {
+  if (chest.type !== 'boss-chest' || chest.opened) return null;
+  chest.opened = true;
+  stats.gold = normalizeGold(stats.gold + chest.gold);
+  stats.maxHp += 20; stats.hp = Math.min(stats.maxHp, stats.hp + 20); stats.damage *= 1.15;
+  return { gold: chest.gold, blessing: chest.blessing };
+}
 export const MAX_GOLD = 999999999;
 export const WEAPONS = Object.freeze([
   Object.freeze({ id: 'sword', name: 'Sanctum Sword', damage: 1, delay: 1, reach: 1, color: '#c0d9d9' }),
@@ -32,7 +52,13 @@ export function normalizeGold(value) {
   return Number.isFinite(n) ? Math.min(MAX_GOLD, Math.max(0, Math.floor(n))) : 0;
 }
 export function loadWallet(storage) {
-  try { return normalizeGold(storage.getItem(WALLET_KEY)); } catch { return 0; }
+  try {
+    const current = storage.getItem(WALLET_KEY);
+    if (current != null) return normalizeGold(current);
+    const gold = normalizeGold(storage.getItem(LEGACY_WALLET_KEY));
+    saveWallet(storage, gold);
+    return gold;
+  } catch { return 0; }
 }
 export function saveWallet(storage, gold) {
   try { storage.setItem(WALLET_KEY, String(normalizeGold(gold))); return true; } catch { return false; }

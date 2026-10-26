@@ -7,6 +7,6 @@
   "scripts": {
     "dev": "node --max-old-space-size=128 scripts/dev-server.mjs",
     "test": "node --test tests/*.test.js",
-    "check": "node --check dist/game.js && node --check dist/rules.js && node --check dist/classes.js && node --check dist/boot.js && node --check dist/loot.js"
+    "check": "node --check dist/game.js && node --check dist/rules.js && node --check dist/classes.js && node --check dist/boot.js && node --check dist/loot.js && node --check dist/boss-model.js && node --check dist/arena-wave5.js && node --check dist/audio.js"
   }
 }
