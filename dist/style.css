@@ -6,3 +6,103 @@
 #equipment{display:none;position:fixed;z-index:3;left:24px;top:330px;max-width:210px;padding:10px;background:#0a131bdf;border:1px solid #bca17740;pointer-events:none}.playing #equipment{display:grid;gap:6px}#equipment b{color:#d9c295;font:13px Georgia,serif}#equipment small{font-size:9px;color:#bac6c3}#wallet-status{color:#f0c96c!important}@media(max-width:700px){#equipment{left:18px;top:190px;max-width:160px;padding:7px}#equipment b{font-size:11px}#equipment small{font-size:8px}}
 
 #exploration #equipment{position:static;max-width:100%;padding:8px 0 0;border:0;border-top:1px solid #bca17740;background:none;width:100%}
+
+/* Selection owns the viewport; the action stays in normal grid flow. */
+#overlay:has(#class-panel:not([hidden])) {
+  height: 100vh;
+  height: 100dvh;
+  padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  overflow: hidden;
+}
+#class-panel {
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
+  gap: clamp(5px, 1.2vh, 14px);
+  width: min(900px, 100%);
+  max-height: 100%;
+  min-height: 0;
+  padding: clamp(2px, 1vh, 12px);
+  overflow: visible;
+}
+#class-panel h2 { margin: 0; font-size: clamp(22px, 4.4vh, 38px); }
+#class-panel .class-lead { margin: 0; font-size: clamp(10px, 1.7vh, 12px); line-height: 1.5; }
+#class-panel #class-choices { gap: clamp(5px, 1vw, 12px); margin: 0; }
+#class-panel .class-choice { min-width: 0; gap: clamp(3px, .8vh, 8px); padding: clamp(6px, 1.7vh, 17px) 5px; }
+#class-panel .class-choice > span { font-size: clamp(20px, 3.5vh, 26px); }
+#class-panel .class-choice b { font-size: clamp(13px, 2.4vh, 18px); }
+#class-panel .class-choice small { font-size: clamp(8px, 1.3vh, 10px); line-height: 1.4; }
+#class-preview { display: grid; gap: clamp(5px, 1vh, 10px); min-height: 0; }
+#class-preview .path-ability { margin: 0; padding: clamp(7px, 1.5vh, 14px) clamp(8px, 1.5vw, 18px); gap: clamp(8px, 1.5vw, 18px); }
+#class-preview .path-ability > div { min-width: 0; }
+#class-preview .path-ability h3 { margin: clamp(3px, .7vh, 7px) 0; font-size: clamp(13px, 2.2vh, 17px); }
+#class-preview .path-ability p { font-size: clamp(10px, 1.6vh, 12px); line-height: 1.5; }
+#class-preview .path-icon { width: 26px; font-size: clamp(22px, 3.5vh, 30px); }
+#class-panel #class-start { position: static; justify-self: center; min-width: min(275px, 100%); min-height: 44px; margin: 0; padding: clamp(12px, 2vh, 18px) 20px; box-shadow: none; }
+
+/* Native disclosure: keyboard accessible, collapsed until requested, no game JS. */
+#arena-info { display: none; position: fixed; z-index: 5; top: max(100px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); width: 170px; }
+.playing #arena-info { display: block; }
+#arena-info > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); background: #0a131bf0; color: var(--gold); font-size: 10px; letter-spacing: 1px; cursor: pointer; list-style: none; touch-action: manipulation; }
+#arena-info > summary::-webkit-details-marker { display: none; }
+#arena-info > summary::after { content: '+'; font-size: 20px; }
+#arena-info[open] > summary::after { content: '−'; }
+#arena-info[open] { z-index: 6; }
+#arena-info > summary:focus-visible { outline: 2px solid #eac18b; outline-offset: 2px; }
+.arena-info-content { display: flex; flex-direction: column; gap: 12px; padding: 12px; background: #0a131bf0; border: 1px solid var(--line); border-top: 0; max-height: calc(100vh - 350px); max-height: calc(100dvh - 350px); overflow-y: auto; overscroll-behavior: contain; }
+#arena-info #run-info, #arena-info #exploration { position: static; width: 100%; padding: 0; background: none; border: 0; }
+#arena-info #exploration { order: -1; }
+#arena-info .run-stat { margin-top: 10px; }
+#arena-info .rule { margin: 14px 0; }
+#arena-info #minimap { width: 100%; max-width: 128px; height: auto; aspect-ratio: 1; }
+
+/* Short landscape screens put descriptions side by side to preserve their text. */
+@media (max-height: 500px) and (min-width: 540px) {
+  #class-panel { gap: 5px; }
+  #class-panel .class-lead br { display: none; }
+  #class-panel .class-lead { font-size: 10px; }
+  #class-panel .class-choice { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; padding: 5px 8px; text-align: left; }
+  #class-panel .class-choice > span { grid-row: span 2; }
+  #class-panel .class-choice b { font-size: 13px; }
+  #class-preview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #class-preview .path-ability { padding: 8px; gap: 0; }
+  #class-preview .path-icon { display: none; }
+  #class-preview .eyebrow { font-size: 7px; letter-spacing: .5px; }
+  #class-preview .path-ability h3 { font-size: 13px; }
+  #class-preview .path-ability p { font-size: 10px; }
+  #class-panel #class-start { padding-block: 10px; }
+}
+
+/* Any coarse pointer includes touch laptops and tablets with an attached mouse. */
+@media (any-pointer: coarse) {
+  :root { --touch-size: clamp(48px, 14vw, 64px); --touch-gap: 6px; --touch-edge: max(12px, env(safe-area-inset-right)); --touch-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .ability kbd, #class-info kbd, .path-ability kbd, .hud-right small, #attack { display: none; }
+  #hud { padding: 0; background: none; pointer-events: none; }
+  .playing #hud { pointer-events: none; }
+  #hud .abilities { position: fixed; right: var(--touch-edge); bottom: var(--touch-bottom); gap: var(--touch-gap); pointer-events: auto; }
+  #hud .ability, #class-hud .class-ability { width: var(--touch-size); height: var(--touch-size); min-height: 48px; padding: 2px; gap: 2px; touch-action: manipulation; }
+  #hud .ability-glyph, #class-hud .ability-glyph { font-size: calc(var(--touch-size) * .36); line-height: 1; }
+  #hud .ability small, #class-hud .class-ability small { font-size: clamp(6px, calc(var(--touch-size) * .11), 7px); line-height: 1.05; letter-spacing: 0; }
+  #class-hud .class-state { font-size: 6px; line-height: 1; white-space: nowrap; }
+  body #class-hud { left: auto; right: var(--touch-edge); bottom: calc(var(--touch-bottom) + var(--touch-size) + var(--touch-gap)); transform: none; width: calc(3 * var(--touch-size) + 2 * var(--touch-gap)); }
+  #class-hud #class-slots { gap: var(--touch-gap); }
+  #class-hud #class-info { width: 100%; min-height: 44px; padding: 8px 4px; margin-bottom: 4px; letter-spacing: .6px; touch-action: manipulation; }
+  #class-hud #class-buff { position: absolute; bottom: calc(100% + 2px); right: 0; width: 100%; margin: 0; }
+  #hud .vitals { position: fixed; left: max(16px, env(safe-area-inset-left)); bottom: calc(var(--touch-bottom) + 118px); width: clamp(120px, 30vw, 190px); gap: 0; }
+  #hud .orb, #hud .health small, #hud .hud-right { display: none; }
+  #hud .health-track { margin: 8px 0 0; }
+  .playing #touch-controls { display: block; position: fixed; z-index: 5; left: max(16px, env(safe-area-inset-left)); bottom: var(--touch-bottom); }
+  #touch-controls #joystick { display: grid; place-items: center; width: clamp(88px, 23vw, 108px); height: clamp(88px, 23vw, 108px); border: 1px solid #c3ab713d; border-radius: 50%; background: #27312d44; touch-action: none; }
+  #touch-controls #joystick i { width: 30px; height: 30px; background: #b9a57e44; border: 1px solid #c3ab715a; border-radius: 50%; pointer-events: none; }
+  body #interact { left: auto; right: var(--touch-edge); bottom: calc(var(--touch-bottom) + 2 * var(--touch-size) + 76px); transform: none; max-width: calc(3 * var(--touch-size) + 2 * var(--touch-gap)); min-height: 44px; padding: 10px; }
+  #arena-info { width: 148px; top: max(82px, env(safe-area-inset-top)); right: var(--touch-edge); }
+  #arena-info .arena-info-content { max-height: calc(100dvh - 360px); }
+  #arena-info #gifts { display: flex; }
+  #arena-info .rule, #arena-info .rule + .eyebrow { display: block; }
+}
+@media (any-pointer: coarse) and (max-height: 500px) {
+  :root { --touch-size: 48px; }
+  #arena-info { top: 70px; width: 140px; }
+  #arena-info .arena-info-content { max-height: calc(100dvh - 132px); }
+  header .wave-status { top: 12px; }
+  #class-info { min-height: 44px; }
+}

@@ -18,8 +18,14 @@
     <div class="wave-status"><span class="eyebrow" id="chapter">THE FORSAKEN SANCTUM</span><div><i></i> <span id="wave-title">THE GATES AWAIT</span> <i></i></div><span id="wave-detail">A covenant written in ash.</span></div>
     <div class="header-actions"><button id="sound" class="icon-button" aria-label="Enable sound" title="Toggle sound">♪<span>SOUND OFF</span></button><button id="pause" class="icon-button" aria-label="Pause game" title="Pause (Esc)">Ⅱ</button></div>
   </header>
+  <details id="arena-info">
+    <summary>MAP &amp; STATS</summary>
+    <div class="arena-info-content">
   <aside id="run-info"><div class="eyebrow">YOUR DESCENT</div><div class="run-stat"><span>Demons slain</span><b id="kills">0</b></div><div class="run-stat"><span>Souls claimed</span><b id="souls">0</b></div><div class="rule"></div><div class="eyebrow">COVENANT GIFTS</div><div id="gifts"><span class="muted">Power comes at a price.</span></div></aside>
-  <aside id="exploration"><span id="region">Forsaken Sanctum</span><canvas id="minimap" width="128" height="128" aria-label="Map: gold squares are chests, green is the healing shrine, white is you"></canvas><b id="gold">0 GOLD</b><small id="chest-count">0/12 CHESTS</small><aside id="equipment" aria-label="Equipped weapon"><b id="weapon-name">Worn Sanctum Sword</b><small id="weapon-details"></small><small id="wallet-status">WALLET - KEPT ON DEATH</small></aside></aside><button id="interact" hidden>E · OPEN CHEST</button>
+  <aside id="exploration"><span id="region">Forsaken Sanctum</span><canvas id="minimap" width="128" height="128" aria-label="Map: gold squares are chests, green is the healing shrine, white is you"></canvas><b id="gold">0 GOLD</b><small id="chest-count">0/12 CHESTS</small><aside id="equipment" aria-label="Equipped weapon"><b id="weapon-name">Worn Sanctum Sword</b><small id="weapon-details"></small><small id="wallet-status">WALLET - KEPT ON DEATH</small></aside></aside>
+    </div>
+  </details>
+  <button id="interact" hidden>E · OPEN CHEST</button>
   <div id="announcement" aria-live="polite"></div><div id="floaters"></div>
   <div id="boss-hud" hidden><span>THE CATHEDRAL WARDEN</span><div><i id="boss-fill"></i></div></div>
   <footer id="hud">
@@ -31,7 +37,7 @@
   <div id="touch-controls"><div id="joystick"><i></i></div></div>
   <section id="class-hud" aria-label="Class abilities"><button id="class-info" title="View class progression (K)">REAVER · CLASS PATH <kbd>K</kbd></button><div id="class-slots"></div><div id="class-buff"></div></section>
   <main id="overlay" class="overlay">
-    <section id="class-panel" class="panel class-panel" hidden><div class="eyebrow">THREE PATHS INTO THE DARK</div><h2>Choose your calling.</h2><p class="class-lead">Your class abilities awaken after clearing waves 1, 3, and 5.<br>Each new run begins a new path. Blessings remain yours to choose.</p><div id="class-choices" aria-label="Choose a class"></div><div id="class-preview"></div><button id="class-start" class="primary">SEAL THE COVENANT <span>→</span></button></section>
+    <section id="class-panel" class="panel class-panel" hidden><div class="eyebrow">THREE PATHS INTO THE DARK</div><h2>Choose your calling.</h2><p class="class-lead">Your class abilities awaken after clearing waves 1, 3, and 5.<br> Each new run begins a new path. Blessings remain yours to choose.</p><div id="class-choices" aria-label="Choose a class"></div><div id="class-preview"></div><button id="class-start" class="primary">SEAL THE COVENANT <span>→</span></button></section>
     <section id="class-path-panel" class="panel class-panel" hidden><div class="eyebrow">YOUR COVENANT</div><h2 id="class-path-title"></h2><p class="class-lead">Clear waves to unlock your class abilities for this run.</p><div id="class-path"></div><button id="class-back" class="primary">RETURN TO THE FIGHT <span>→</span></button></section>
     <section id="intro" class="intro panel"><div class="eyebrow"><span class="tiny-star">✦</span> A DARK FANTASY ROGUELIKE</div><h1>ASHEN<br><em>COVENANT</em></h1><div class="title-rule"><i></i> ✧ <i></i></div><p>The cathedral has fallen.<br>Something beneath it is still breathing.</p><p class="intro-sub">Slay the horde. Claim forbidden power.<br>Explore four lost districts. Find gold and relics.</p><button id="start" class="primary">ENTER THE SANCTUM <span>→</span></button><div class="intro-hint">ONE LIFE <span>✦</span> ENDLESS WAVES <span>✦</span> YOUR BUILD</div><div id="loading">Kindling the last flame…</div></section>
     <section id="upgrade-panel" class="panel upgrade-panel" hidden><div class="eyebrow">THE DARKNESS OFFERS A BARGAIN</div><h2>Choose your blessing.</h2><p id="upgrade-sub">One gift. A little less of your humanity.</p><div id="class-unlock" role="status" hidden></div><div id="cards"></div><small class="choice-note">Your wounds mend by 25% between waves. Choose with keys 1–3.</small></section>
